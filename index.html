@@ -1303,7 +1303,7 @@ $('xlsBtn').onclick = async () => {
 };
 
 // ---------- Instagram: ответ клиенту через сервер (instagram-worker) ----------
-const IG_SERVER = ''; // адрес Cloudflare Worker, напр. https://lepestok-ig.<ник>.workers.dev — пусто = ответы выключены
+const IG_SERVER = 'https://lepestok-ig.flowersshop02.workers.dev'; // Cloudflare Worker (instagram-worker/worker.js)
 async function igReply(id) {
   const l = leads.find(x => x.id === id), box = $('r_' + id), text = box.value.trim();
   if (!text) return;
