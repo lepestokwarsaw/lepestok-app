@@ -409,13 +409,14 @@
       <div class="card">
         <div class="row2">
           <div><label>Доставка, zł</label><input id="sDeliv" type="number" inputmode="decimal"></div>
-          <div><label>Флористке Саше, % от маржи</label><input id="sFlorist" type="number" inputmode="decimal"></div>
+          <div><label>Флористке Саше, % от маржи</label><input id="sFlorist" type="text" inputmode="decimal"></div>
         </div>
         <label>Бесплатная доставка от суммы заказа, zł</label><input id="sFree" type="number" inputmode="decimal">
         <div class="row2">
-          <div><label>Доля Сени, %</label><input id="sShareS" type="number" inputmode="decimal"></div>
-          <div><label>Доля Бори, %</label><input id="sShareB" type="number" inputmode="decimal"></div>
+          <div><label>Доля Сени, % от маржи</label><input id="sShareS" type="text" inputmode="decimal"></div>
+          <div><label>Доля Бори, % от маржи</label><input id="sShareB" type="text" inputmode="decimal"></div>
         </div>
+        <div class="meta" id="sShareSum" style="margin-top:6px"></div>
         <label>Упаковка на 1 букет (расходники)</label>
         <div id="sPack"></div>
         <button class="small" id="sPackAdd">+ расходник</button>
@@ -1090,9 +1091,14 @@ function leadCalc(l) {
   const deliv = l.deliv || 0, driver = pick ? 0 : (l.driver != null ? l.driver : deliv);
   const delivCost = Math.max(0, driver - deliv); // бесплатная/промо доставка — расход магазина
   const sale = l.sale || 0, costAll = flowers + pack + delivCost, margin = sale - costAll;
-  const florist = Math.max(0, margin * (SETTINGS.florist || 0) / 100);
+  // маржа делится между флористкой и партнёрами по процентам (в сумме 100%, можно дробные);
+  // старые настройки, где доли партнёров = 100% от остатка после флористки, считаются как раньше
+  const fl = SETTINGS.florist || 0, sh = SETTINGS.shares || {};
+  const parts = PARTNERS.reduce((a, p) => a + (sh[p] || 0), 0);
+  const legacy = Math.abs(parts - 100) < 0.01 && fl > 0;
+  const florist = Math.max(0, margin * fl / 100);
   const net = margin - florist;
-  const share = {}; PARTNERS.forEach(p => share[p] = net * ((SETTINGS.shares || {})[p] || 0) / 100);
+  const share = {}; PARTNERS.forEach(p => share[p] = (legacy ? net : margin) * (sh[p] || 0) / 100);
   const back = {}; PARTNERS.forEach(p => back[p] = 0);
   if (l.paidBy === 'Оба') { back['Сеня'] = l.paidS || 0; back['Боря'] = l.paidB || 0; }
   else if (PARTNERS.includes(l.paidBy)) back[l.paidBy] = flowers;
@@ -1213,11 +1219,11 @@ function renderReport() {
     const share = cs.reduce((s, c) => s + c.share[p], 0), back = cs.reduce((s, c) => s + c.back[p], 0);
     const drove = ls.filter(l => l.courier === p).reduce((s, l) => s + leadCalc(l).driver, 0);
     return `<div class="person"><div class="name">${p}</div>
-      <div><span>Доля прибыли ${(SETTINGS.shares || {})[p] || 0}%</span><span>${zl(share)}</span></div>
+      <div><span>Доля ${pctStr((SETTINGS.shares || {})[p] || 0)}% маржи</span><span>${zl(share)}</span></div>
       <div><span>Возврат за цветы</span><span>${zl(back)}</span></div>
       <div><span>За доставку</span><span>${zl(drove)}</span></div>
       <div><b>Итого к выплате</b><b>${zl(share + back + drove)}</b></div></div>`;
-  }).join('') + `<div class="person"><div class="name">Флористка Саша</div><div><span>${SETTINGS.florist || 0}% от маржи</span><span>${zl(florist)}</span></div></div>
+  }).join('') + `<div class="person"><div class="name">Флористка Саша</div><div><span>${pctStr(SETTINGS.florist || 0)}% от маржи</span><span>${zl(florist)}</span></div></div>
     <div class="person"><div class="name">Курьер / такси</div><div><span>Доставки</span><span>${zl(ls.filter(l => l.courier === 'Курьер / такси').reduce((s, l) => s + leadCalc(l).driver, 0))}</span></div></div>
     <div class="meta">Клиенты заплатили за доставку: ${zl(deliv)} · бесплатные/промо доставки стоили нам: ${zl(S('delivCost'))}</div>`;
 
@@ -1249,7 +1255,7 @@ let packDraft = [];
 function fillSettings() {
   $('sDeliv').value = SETTINGS.delivery; $('sFlorist').value = SETTINGS.florist; $('sFree').value = SETTINGS.freeFrom;
   $('sShareS').value = (SETTINGS.shares || {})['Сеня']; $('sShareB').value = (SETTINGS.shares || {})['Боря'];
-  packDraft = (SETTINGS.pack || []).map(p => [p[0], p[1]]); drawPack();
+  packDraft = (SETTINGS.pack || []).map(p => [p[0], p[1]]); drawPack(); shareSum();
 }
 function drawPack() {
   $('sPack').innerHTML = packDraft.map((p, i) => `<div class="packrow">
@@ -1258,6 +1264,13 @@ function drawPack() {
     <button class="del" onclick="packDraft.splice(${i},1);drawPack()">✕</button></div>`).join('');
   packSum();
 }
+const pctStr = v => (Math.round(v * 100) / 100).toLocaleString('ru-RU');
+function shareSum() {
+  const t = num($('sFlorist').value) + num($('sShareS').value) + num($('sShareB').value), ok = Math.abs(t - 100) < 0.01;
+  $('sShareSum').textContent = `Делим маржу: Саша ${pctStr(num($('sFlorist').value))}% + Сеня ${pctStr(num($('sShareS').value))}% + Боря ${pctStr(num($('sShareB').value))}% = ${pctStr(t)}%` + (ok ? ' ✓' : ' — нужно 100%');
+  $('sShareSum').className = ok ? 'meta pos' : 'meta neg';
+}
+['sFlorist', 'sShareS', 'sShareB'].forEach(id => $(id).addEventListener('input', shareSum));
 function packSum() { $('sPackTotal').textContent = 'Итого упаковка на 1 букет: ' + zl(packDraft.reduce((a, p) => a + (+p[1] || 0), 0)); }
 $('sPackAdd').onclick = () => { packDraft.push(['', 0]); drawPack(); };
 $('sSave').onclick = async () => {
@@ -1265,7 +1278,8 @@ $('sSave').onclick = async () => {
              shares: {'Сеня': num($('sShareS').value), 'Боря': num($('sShareB').value)},
              pack: packDraft.filter(p => String(p[0]).trim()).map(p => [String(p[0]).trim(), +p[1] || 0])};
   $('sErr').textContent = '';
-  if (Math.round(s.shares['Сеня'] + s.shares['Боря']) !== 100) return $('sErr').textContent = 'Доли Сени и Бори должны давать 100%';
+  const total = s.florist + s.shares['Сеня'] + s.shares['Боря'];
+  if (Math.abs(total - 100) > 0.01) return $('sErr').textContent = `Флористка + Сеня + Боря должны давать 100% маржи (сейчас ${pctStr(total)}%)`;
   $('sSave').disabled = true;
   const saved = await mutate(d => { d.settings = s; }, 'Параметры обновлены').catch(() => false);
   $('sSave').disabled = false;
