@@ -107,11 +107,18 @@
       <div class="err" id="lockErr"></div>
       <button id="unlockBtn">Снять блокировку</button>
     </div>
+    <div class="card hidden" id="tokenCard">
+      <p class="hint">🔑 Ключ доступа к общей базе. Вводится один раз на этом устройстве — у всех участников один и тот же ключ.</p>
+      <label>Ключ доступа (GitHub token)</label><input id="tokenInput" type="password" autocomplete="off" placeholder="github_pat_…">
+      <div class="err" id="tokenErr"></div>
+      <button id="tokenBtn">Сохранить</button>
+    </div>
   </div>
 
   <!-- ПРИЛОЖЕНИЕ -->
   <div id="app" class="hidden">
     <h1>🌸 Закупка цветов</h1>
+    <div class="meta" id="sync" style="margin:-10px 4px 10px"></div>
     <div class="tabs"><a id="tabP" class="on">Закупки</a><a id="tabL">Лиды</a></div>
 
     <!-- ЛИДЫ -->
@@ -167,6 +174,7 @@
     <div id="list"></div>
     </div>
 
+    <button class="ghost" id="changeTokenBtn">🔑 Сменить ключ доступа</button>
     <button class="ghost" id="logoutBtn">Выйти</button>
   </div>
 </div>
@@ -284,14 +292,107 @@ const cost = i => i.packs * i.price;
 const askDel = q => new Promise(r => inTG ? tg.showConfirm(q, r) : r(confirm(q)));
 const ok = () => tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success');
 
-async function load() {
-  const keys = (await store.keys()).filter(k => k.startsWith('p_') || k.startsWith('l_'));
-  const vals = keys.length ? await store.get(keys) : {};
-  const parse = k => { try { return JSON.parse(vals[k]); } catch { return null; } };
-  items = keys.filter(k => k[0] === 'p').map(parse).filter(Boolean).sort((a, b) => b.t - a.t);
-  leads = keys.filter(k => k[0] === 'l').map(parse).filter(Boolean).sort((a, b) => b.t - a.t);
+// ---------- общая база: data.json в приватном репозитории GitHub ----------
+// Ключ доступа (fine-grained token, Contents: read/write только для этого репо) вводится
+// один раз на устройстве и хранится в облаке Telegram этого пользователя — в коде его нет.
+const DATA_REPO = 'lepestokwarsaw/lepestok-data', DATA_FILE = 'data.json';
+const API = `https://api.github.com/repos/${DATA_REPO}/contents/${DATA_FILE}`;
+const POLL_MS = 4000;
+let ghToken = '', dataSha = null, dataEtag = null, lastWrite = 0, pollTimer = null;
+
+const b64decode = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, '')), c => c.charCodeAt(0)));
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+const ghHeaders = extra => Object.assign({Authorization: 'Bearer ' + ghToken, Accept: 'application/vnd.github+json'}, extra);
+
+// {data, sha} | null (не изменилось); при ошибке бросает Error со status
+async function ghGet(useEtag) {
+  const r = await fetch(API + '?t=' + Date.now(), {cache: 'no-store', headers: ghHeaders(useEtag && dataEtag ? {'If-None-Match': dataEtag} : {})});
+  if (r.status === 304) return null;
+  if (r.status === 404) {
+    // файла ещё нет — пустая база (но GitHub отвечает 404 и когда нет доступа к репо)
+    const repo = await fetch(`https://api.github.com/repos/${DATA_REPO}`, {headers: ghHeaders()});
+    if (!repo.ok) throw Object.assign(new Error('Нет доступа к репозиторию ' + DATA_REPO), {status: repo.status});
+    return {data: {items: [], leads: []}, sha: null};
+  }
+  if (r.status === 401) throw Object.assign(new Error('Неверный или просроченный ключ'), {status: 401});
+  if (!r.ok) throw Object.assign(new Error('GitHub: ошибка ' + r.status), {status: r.status});
+  const j = await r.json();
+  if (useEtag) dataEtag = r.headers.get('ETag');
+  return {data: JSON.parse(b64decode(j.content) || '{}'), sha: j.sha};
+}
+
+function applyData(d) {
+  items = (d.items || []).slice().sort((a, b) => b.t - a.t);
+  leads = (d.leads || []).slice().sort((a, b) => b.t - a.t);
   render();
 }
+function setSync(text, bad) { $('sync').textContent = text; $('sync').classList.toggle('neg', !!bad); }
+
+// изменить базу: берём свежую версию, применяем fn, сохраняем; при конфликте — повтор
+async function mutate(fn, msg) {
+  setSync('⏳ сохраняю…');
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const cur = await ghGet(false);
+    const d = cur.data; d.items = d.items || []; d.leads = d.leads || [];
+    fn(d);
+    const r = await fetch(API, {method: 'PUT', headers: ghHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify(Object.assign({message: msg, content: b64encode(JSON.stringify(d, null, 1))}, cur.sha ? {sha: cur.sha} : {}))});
+    if (r.ok) {
+      dataSha = (await r.json()).content.sha; dataEtag = null; lastWrite = Date.now();
+      applyData(d); setSync('✓ синхронизировано'); ok();
+      return true;
+    }
+    if (r.status !== 409 && r.status !== 422) { setSync('⚠️ не сохранено: ошибка ' + r.status, true); return false; }
+  }
+  setSync('⚠️ не сохранено: конфликт, попробуй ещё раз', true);
+  return false;
+}
+
+async function poll() {
+  if (document.hidden || Date.now() - lastWrite < 3000) return;
+  try {
+    const cur = await ghGet(true);
+    if (cur && cur.sha !== dataSha) { dataSha = cur.sha; applyData(cur.data); }
+    setSync('✓ синхронизировано');
+  } catch (e) { setSync('⚠️ нет связи с базой', true); }
+}
+
+async function load() {
+  setSync('⏳ загрузка…');
+  try {
+    const cur = await ghGet(true);
+    dataSha = cur.sha; applyData(cur.data); setSync('✓ синхронизировано');
+  } catch (e) {
+    if (e.status === 401 || e.status === 403 || e.status === 404) return askToken('Ключ не подходит: ' + e.message);
+    setSync('⚠️ нет связи с базой', true);
+  }
+  clearInterval(pollTimer); pollTimer = setInterval(poll, POLL_MS);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+
+// ---------- ключ доступа ----------
+function askToken(err) {
+  $('app').classList.add('hidden'); $('auth').classList.remove('hidden');
+  $('loginCard').classList.add('hidden'); $('lockCard').classList.add('hidden'); $('tokenCard').classList.remove('hidden');
+  $('tokenErr').textContent = err || '';
+}
+$('tokenBtn').onclick = async () => {
+  const t = $('tokenInput').value.trim();
+  $('tokenErr').textContent = '';
+  if (!t) return $('tokenErr').textContent = 'Вставь ключ';
+  ghToken = t; $('tokenBtn').disabled = true; $('tokenBtn').textContent = 'Проверяю…';
+  try { await ghGet(false); }
+  catch (e) { $('tokenBtn').disabled = false; $('tokenBtn').textContent = 'Сохранить'; ghToken = ''; return $('tokenErr').textContent = e.message; }
+  await store.set('gh_token', t);
+  $('tokenInput').value = ''; $('tokenBtn').disabled = false; $('tokenBtn').textContent = 'Сохранить';
+  $('tokenCard').classList.add('hidden'); $('auth').classList.add('hidden'); $('app').classList.remove('hidden');
+  load();
+};
+$('changeTokenBtn').onclick = () => { clearInterval(pollTimer); askToken(''); };
 
 // ---------- вкладки ----------
 function tab(name) {
@@ -316,17 +417,17 @@ $('addBtn').onclick = async () => {
   $('addErr').textContent = '';
   if (!name || !c.packs || !c.per || !c.price) return $('addErr').textContent = 'Заполни все поля';
   const it = {id: Date.now().toString(36), t: Date.now(), name, packs: c.packs, per: c.per, price: c.price, lead: $('fLead').value};
-  try { await store.set('p_' + it.id, JSON.stringify(it)); }
-  catch (e) { return $('addErr').textContent = 'Ошибка сохранения: ' + e; }
-  items.unshift(it);
+  $('addBtn').disabled = true;
+  const saved = await mutate(d => d.items.push(it), 'Закупка: ' + name).catch(() => false);
+  $('addBtn').disabled = false;
+  if (!saved) return $('addErr').textContent = 'Не сохранилось — проверь интернет и попробуй ещё раз';
   $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1';
-  calc(); render(); ok();
+  calc();
 };
 
 async function delItem(id) {
   if (!await askDel('Удалить закупку?')) return;
-  await store.del('p_' + id);
-  items = items.filter(i => i.id !== id); render();
+  await mutate(d => { d.items = d.items.filter(i => i.id !== id); }, 'Удалена закупка').catch(() => setSync('⚠️ не сохранено', true));
 }
 
 // ---------- прайс-лист (НАШ ПРАЙСЛИСТ 10.2026): цена букета за N штук, 0 = нет в прайсе ----------
@@ -374,12 +475,12 @@ $('leadBtn').onclick = async () => {
   const l = {id: Date.now().toString(36), t: Date.now(), name, contact: $('lContact').value.trim(), note: $('lNote').value.trim(),
              bouquet: i === '' ? '' : itemName(i), qty: i === '' ? 0 : q, list: listPrice(i, q),
              sale: num($('lSale').value), pack: $('lPack').value === '' ? PACK_COST : num($('lPack').value)};
-  try { await store.set('l_' + l.id, JSON.stringify(l)); }
-  catch (e) { return $('leadErr').textContent = 'Ошибка сохранения: ' + e; }
-  leads.unshift(l);
+  $('leadBtn').disabled = true;
+  const saved = await mutate(d => d.leads.push(l), 'Лид: ' + name).catch(() => false);
+  $('leadBtn').disabled = false;
+  if (!saved) return $('leadErr').textContent = 'Не сохранилось — проверь интернет и попробуй ещё раз';
   ['lName', 'lContact', 'lNote'].forEach(id => $(id).value = '');
   $('lItem').value = ''; $('lPack').value = PACK_COST; fillQty();
-  render(); ok();
 };
 
 // изменить финальную цену / упаковку у существующего лида
@@ -387,17 +488,16 @@ async function editLead(id, field) {
   const l = leads.find(x => x.id === id);
   const v = num($('e_' + field + '_' + id).value);
   if (l[field] === v) return;
-  l[field] = v;
-  await store.set('l_' + l.id, JSON.stringify(l));
-  render(); ok();
+  await mutate(d => { const x = d.leads.find(x => x.id === id); if (x) x[field] = v; }, 'Лид изменён: ' + l.name)
+    .catch(() => setSync('⚠️ не сохранено', true));
 }
 
 async function delLead(id) {
   if (!await askDel('Удалить лида? Закупки останутся, но без привязки.')) return;
-  await store.del('l_' + id);
-  leads = leads.filter(l => l.id !== id);
-  for (const i of items.filter(i => i.lead === id)) { i.lead = ''; await store.set('p_' + i.id, JSON.stringify(i)); }
-  render();
+  await mutate(d => {
+    d.leads = d.leads.filter(l => l.id !== id);
+    d.items.forEach(i => { if (i.lead === id) i.lead = ''; });
+  }, 'Удалён лид').catch(() => setSync('⚠️ не сохранено', true));
 }
 
 function buyFor(id) {
@@ -479,7 +579,11 @@ function render() {
   }).join('');
 }
 
-function showApp() { $('auth').classList.add('hidden'); $('app').classList.remove('hidden'); load(); }
+async function showApp() {
+  ghToken = (await store.get(['gh_token'])).gh_token || '';
+  if (!ghToken) return askToken('');
+  $('auth').classList.add('hidden'); $('app').classList.remove('hidden'); load();
+}
 initAuth();
 </script>
 </body>
