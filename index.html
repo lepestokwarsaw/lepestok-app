@@ -67,6 +67,26 @@
   .sizes span{display:block;font-size:12px;color:var(--hint)}
   .sizes input{padding:7px 8px;font-size:15px}
   select.mini{width:auto;padding:5px 8px;font-size:14px;display:inline-block}
+  .tabs a{padding:9px 2px;font-size:13px}
+  .person{border-bottom:1px solid rgba(128,128,128,.2);padding:8px 0}
+  .person:last-of-type{border-bottom:0}
+  .person div,#repCapex div{display:flex;justify-content:space-between;font-size:14px;padding:2px 0}
+  .person .name{display:block;font-size:15px}
+  .sum{grid-template-columns:repeat(3,1fr);row-gap:12px}
+  .packrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .packrow input:first-child{flex:1}
+  .packrow .del{margin:0}
+  .iglink{color:var(--accent);text-decoration:none}
+  .calhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .calhead a{font-size:24px;padding:0 12px;cursor:pointer;color:var(--accent)}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+  .calgrid .wd{font-size:11px;color:var(--hint)}
+  .calgrid .d{padding:6px 0;border-radius:8px;font-size:14px;cursor:pointer;background:var(--bg2);min-height:38px}
+  .calgrid .d.today{outline:2px solid var(--accent)}
+  .calgrid .d.sel{background:var(--accent);color:var(--accent-text)}
+  .calgrid .d i{display:block;font-style:normal;font-size:11px;font-weight:700;color:var(--accent)}
+  .calgrid .d.sel i{color:var(--accent-text)}
+  .calgrid .d.empty{background:none;cursor:default}
   .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px;margin-top:14px;cursor:pointer}
   .check input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
   select{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
@@ -131,13 +151,13 @@
   <div id="app" class="hidden">
     <h1>🌸 Закупка цветов</h1>
     <div class="meta" id="sync" style="margin:-10px 4px 10px"></div>
-    <div class="tabs"><a id="tabP" class="on">Закупки</a><a id="tabL">Лиды</a><a id="tabR">Прайс</a></div>
+    <div class="tabs"><a id="tabP" class="on">Закупки</a><a id="tabL">Лиды</a><a id="tabE">Расходы</a><a id="tabO">Отчёт</a><a id="tabR">Прайс</a></div>
 
     <!-- ЛИДЫ -->
     <div id="leadsView" class="hidden">
       <div class="card" id="leadForm">
         <div class="name hidden" id="editTitle">✏️ Редактирование лида</div>
-        <label>Телефон / Instagram</label><input id="lContact" placeholder="+48 …" list="contacts" autocomplete="off">
+        <label>Телефон</label><input id="lContact" placeholder="+48 …" list="contacts" autocomplete="off">
         <datalist id="contacts"></datalist>
         <div class="client hidden" id="clientHint"></div>
         <label>Имя клиента</label><input id="lName" placeholder="Анна">
@@ -159,6 +179,19 @@
           <div><label class="check" style="margin-top:28px"><input type="checkbox" id="lPaid"> Оплачено</label></div>
           <div><label>Способ оплаты</label><select id="lPay"><option value="">—</option><option>Наличные</option><option>Карта</option><option>BLIK</option><option>Перевод</option></select></div>
         </div>
+        <div class="row2">
+          <div><label>Кто оплатил цветы</label><select id="lPaidBy"></select></div>
+          <div><label>Себест. цветов, zł</label><input id="lFlowers" type="number" inputmode="decimal" placeholder="из закупок"></div>
+        </div>
+        <div class="row2 hidden" id="lSplitWrap">
+          <div><label>Сеня заплатил, zł</label><input id="lPaidS" type="number" inputmode="decimal"></div>
+          <div><label>Боря заплатил, zł</label><input id="lPaidB" type="number" inputmode="decimal"></div>
+        </div>
+        <div class="row2">
+          <div><label>Кто везёт</label><select id="lCourier"></select></div>
+          <div><label>Доставка, zł</label><input id="lDeliv" type="number" inputmode="decimal" placeholder="0"></div>
+        </div>
+        <label>Instagram клиента</label><input id="lIg" placeholder="@nickname" autocapitalize="off">
         <label>Заметка (адрес, пожелания)</label><input id="lNote" placeholder="ul. Marszałkowska 1, без зелени">
         <div class="err" id="leadErr"></div>
         <button id="leadBtn">Добавить лида</button>
@@ -167,7 +200,11 @@
 
       <input id="lSearch" class="search" placeholder="🔍 Поиск: имя, телефон, букет…">
       <div class="chips" id="leadFilter">
-        <a data-f="all" class="on">Все</a><a data-f="today">Сегодня</a><a data-f="tomorrow">Завтра</a><a data-f="unpaid">Не оплачены</a>
+        <a data-f="all" class="on">Все</a><a data-f="today">Сегодня</a><a data-f="tomorrow">Завтра</a><a data-f="unpaid">Не оплачены</a><a data-f="cal">📅 Календарь</a>
+      </div>
+      <div class="card hidden" id="calCard">
+        <div class="calhead"><a id="calPrev">‹</a><b id="calTitle"></b><a id="calNext">›</a></div>
+        <div class="calgrid" id="calGrid"></div>
       </div>
       <div id="leadList"></div>
     </div>
@@ -179,6 +216,63 @@
       <button class="small" id="priceAdd">+ Добавить позицию</button>
       <div class="err" id="priceErr"></div>
       <button id="priceSave">Сохранить прайс</button>
+    </div>
+
+    <!-- РАСХОДЫ (CAPEX) -->
+    <div id="expView" class="hidden">
+      <div class="card">
+        <div class="name hidden" id="expEditTitle">✏️ Редактирование расхода</div>
+        <div class="row2">
+          <div><label>Дата</label><input id="eDate" type="date"></div>
+          <div><label>Сумма, zł</label><input id="eSum" type="number" inputmode="decimal" placeholder="280"></div>
+        </div>
+        <label>Что куплено</label><input id="eWhat" placeholder="Реклама Meta Ads">
+        <label>Категория</label><input id="eCat" list="expCats" placeholder="Реклама Meta Ads">
+        <datalist id="expCats"><option value="Инструменты и склад"><option value="Оборудование (фото / свет)"><option value="Реклама Meta Ads"><option value="Расходники"><option value="Транспорт"></datalist>
+        <div class="row2">
+          <div><label>Кто оплатил</label><select id="ePaidBy"></select></div>
+          <div><label class="check" style="margin-top:28px"><input type="checkbox" id="eSplit" checked> Делить пополам</label></div>
+        </div>
+        <div class="err" id="expErr"></div>
+        <button id="expBtn">Добавить расход</button>
+        <button class="ghost hidden" id="expCancel">Отменить редактирование</button>
+      </div>
+      <div class="card sum" id="expSum"></div>
+      <div id="expList"></div>
+    </div>
+
+    <!-- ОТЧЁТ -->
+    <div id="repView" class="hidden">
+      <div class="chips" id="repPeriod">
+        <a data-p="month" class="on">Этот месяц</a><a data-p="prev">Прошлый</a><a data-p="all">Всё время</a>
+      </div>
+      <div class="card sum" id="repTop"></div>
+      <h2>Кому сколько</h2>
+      <div class="card" id="repPeople"></div>
+      <h2>Вложения (CAPEX)</h2>
+      <div class="card" id="repCapex"></div>
+      <h2>Заказы</h2>
+      <div id="repOrders"></div>
+      <button id="xlsBtn">⬇️ Скачать Excel</button>
+      <div class="meta" id="xlsErr" style="margin-top:6px"></div>
+
+      <h2>Параметры</h2>
+      <div class="card">
+        <div class="row2">
+          <div><label>Доставка водителю, zł</label><input id="sDeliv" type="number" inputmode="decimal"></div>
+          <div><label>Флористке Саше, % от маржи</label><input id="sFlorist" type="number" inputmode="decimal"></div>
+        </div>
+        <div class="row2">
+          <div><label>Доля Сени, %</label><input id="sShareS" type="number" inputmode="decimal"></div>
+          <div><label>Доля Бори, %</label><input id="sShareB" type="number" inputmode="decimal"></div>
+        </div>
+        <label>Упаковка на 1 букет (расходники)</label>
+        <div id="sPack"></div>
+        <button class="small" id="sPackAdd">+ расходник</button>
+        <div class="meta" id="sPackTotal"></div>
+        <div class="err" id="sErr"></div>
+        <button id="sSave">Сохранить параметры</button>
+      </div>
     </div>
 
     <!-- ЗАКУПКИ -->
@@ -200,6 +294,7 @@
       </div>
       <div class="err" id="addErr"></div>
       <button id="addBtn">Добавить закупку</button>
+      <button class="ghost hidden" id="addCancel">Отменить редактирование</button>
     </div>
 
     <h2>Итого</h2>
@@ -368,6 +463,9 @@ function applyData(d) {
   items = (d.items || []).slice().sort((a, b) => b.t - a.t);
   leads = (d.leads || []).slice().sort((a, b) => b.t - a.t);
   PRICES = d.prices && d.prices.length ? d.prices : DEFAULT_PRICES;
+  SETTINGS = Object.assign({}, DEFAULT_SETTINGS, d.settings || {});
+  PACK_COST = packTotal(SETTINGS);
+  expenses = (d.expenses || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.t - a.t);
   render();
 }
 function setSync(text, bad) { $('sync').textContent = text; $('sync').classList.toggle('neg', !!bad); }
@@ -444,12 +542,14 @@ const byLine = r => r.by ? `добавил ${esc(r.by)} · ${when(r.t)}` + (r.ed
 
 // ---------- вкладки ----------
 function tab(name) {
-  [['tabP', 'purchView', 'p'], ['tabL', 'leadsView', 'l'], ['tabR', 'priceView', 'r']].forEach(([t, v, n]) => {
+  [['tabP', 'purchView', 'p'], ['tabL', 'leadsView', 'l'], ['tabE', 'expView', 'e'], ['tabO', 'repView', 'o'], ['tabR', 'priceView', 'r']].forEach(([t, v, n]) => {
     $(t).classList.toggle('on', name === n); $(v).classList.toggle('hidden', name !== n);
   });
   if (name === 'r') renderPrices();
+  if (name === 'o') { renderReport(); fillSettings(); }
+  if (name === 'e' && !expEditId && !$('eDate').value) resetExp();
 }
-$('tabP').onclick = () => tab('p'); $('tabL').onclick = () => tab('l'); $('tabR').onclick = () => tab('r');
+$('tabP').onclick = () => tab('p'); $('tabL').onclick = () => tab('l'); $('tabR').onclick = () => tab('r'); $('tabE').onclick = () => tab('e'); $('tabO').onclick = () => tab('o');
 
 // ---------- закупки ----------
 function calc() {
@@ -462,17 +562,32 @@ function calc() {
 }
 ['fPacks', 'fPer', 'fPrice'].forEach(id => $(id).oninput = calc);
 
+let itemEditId = null;
+function resetItemForm() {
+  itemEditId = null; $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1';
+  $('addBtn').textContent = 'Добавить закупку'; $('addCancel').classList.add('hidden'); $('addErr').textContent = '';
+  calc();
+}
+function editItemForm(id) {
+  const i = items.find(x => x.id === id); if (!i) return;
+  itemEditId = id; tab('p');
+  $('fName').value = i.name; $('fPacks').value = i.packs; $('fPer').value = i.per; $('fPrice').value = i.price; $('fLead').value = i.lead || '';
+  $('addBtn').textContent = 'Сохранить изменения'; $('addCancel').classList.remove('hidden'); calc(); window.scrollTo(0, 0);
+}
+$('addCancel').onclick = resetItemForm;
 $('addBtn').onclick = async () => {
   const name = $('fName').value.trim(), c = calc();
   $('addErr').textContent = '';
   if (!name || !c.packs || !c.per || !c.price) return $('addErr').textContent = 'Заполни все поля';
-  const it = {id: Date.now().toString(36), t: Date.now(), by: me(), name, packs: c.packs, per: c.per, price: c.price, lead: $('fLead').value};
+  const f = {name, packs: c.packs, per: c.per, price: c.price, lead: $('fLead').value}, id = itemEditId;
   $('addBtn').disabled = true;
-  const saved = await mutate(d => d.items.push(it), 'Закупка: ' + name).catch(() => false);
+  const saved = await mutate(d => {
+    if (id) { const x = d.items.find(x => x.id === id); if (x) Object.assign(x, f, {editedBy: me(), et: Date.now()}); }
+    else d.items.push(Object.assign({id: Date.now().toString(36), t: Date.now(), by: me()}, f));
+  }, (id ? 'Закупка изменена: ' : 'Закупка: ') + name).catch(() => false);
   $('addBtn').disabled = false;
   if (!saved) return $('addErr').textContent = 'Не сохранилось — проверь интернет и попробуй ещё раз';
-  $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1';
-  calc();
+  resetItemForm();
 };
 
 async function delItem(id) {
@@ -498,7 +613,7 @@ const DEFAULT_PRICES = [ // НАШ ПРАЙСЛИСТ 10.2026
   ['Гипсофила', 'Стандарт', [89, 149, 219, 279, 399]],
 ];
 let PRICES = DEFAULT_PRICES;
-const PACK_COST = 15; // себестоимость упаковки по умолчанию, zł
+let PACK_COST = 13; // себестоимость упаковки на 1 букет, zł (из параметров)
 const itemName = i => PRICES[i][0] + (!PRICES[i][1] || PRICES[i][1] === 'Стандарт' ? '' : ' ' + PRICES[i][1]);
 
 // цена по прайсу для любого количества: точный размер — как в прайсе,
@@ -556,12 +671,17 @@ function readForm() {
   return {name: $('lName').value.trim(), contact: $('lContact').value.trim(), note: $('lNote').value.trim(),
           bouquet: i === '' ? '' : itemName(i), item: i === '' ? null : Number(i), qty: q, list: priceFor(i, q).price,
           sale: num($('lSale').value), pack: $('lPack').value === '' ? PACK_COST : num($('lPack').value),
-          date: $('lDate').value, time: $('lTime').value, paid: $('lPaid').checked, pay: $('lPay').value};
+          date: $('lDate').value, time: $('lTime').value, paid: $('lPaid').checked, pay: $('lPay').value,
+          flowers: $('lFlowers').value === '' ? null : num($('lFlowers').value),
+          paidBy: $('lPaidBy').value, paidS: num($('lPaidS').value), paidB: num($('lPaidB').value),
+          courier: $('lCourier').value, deliv: num($('lDeliv').value), ig: igNick($('lIg').value)};
 }
 function resetForm() {
   editId = null;
   ['lName', 'lContact', 'lNote', 'lQty', 'lSale', 'lDate', 'lTime'].forEach(id => $(id).value = '');
   $('lItem').value = ''; $('lPack').value = PACK_COST; $('lPaid').checked = false; $('lPay').value = '';
+  ['lFlowers', 'lPaidS', 'lPaidB', 'lDeliv', 'lIg'].forEach(id => $(id).value = '');
+  $('lPaidBy').value = ''; $('lCourier').value = 'Самовывоз'; $('lSplitWrap').classList.add('hidden');
   $('leadBtn').textContent = 'Добавить лида'; $('editTitle').classList.add('hidden'); $('leadCancel').classList.add('hidden');
   $('clientHint').classList.add('hidden'); $('leadErr').textContent = '';
   onBouquetChange();
@@ -575,6 +695,9 @@ function editLeadForm(id) {
   $('lQty').value = l.qty || ''; $('lSale').value = l.sale || ''; $('lPack').value = l.pack == null ? PACK_COST : l.pack;
   $('lListPrice').textContent = l.list ? 'По прайсу было: ' + zl(l.list) : '';
   $('lDate').value = l.date || ''; $('lTime').value = l.time || ''; $('lPaid').checked = !!l.paid; $('lPay').value = l.pay || '';
+  $('lFlowers').value = l.flowers != null ? l.flowers : ''; $('lPaidBy').value = l.paidBy || '';
+  $('lPaidS').value = l.paidS || ''; $('lPaidB').value = l.paidB || ''; $('lSplitWrap').classList.toggle('hidden', l.paidBy !== 'Оба');
+  $('lCourier').value = l.courier || 'Самовывоз'; $('lDeliv').value = l.deliv || ''; $('lIg').value = l.ig ? '@' + l.ig : '';
   $('leadBtn').textContent = 'Сохранить изменения'; $('editTitle').classList.remove('hidden'); $('leadCancel').classList.remove('hidden');
   showClientHint(); tab('l'); $('leadForm').scrollIntoView({behavior: 'smooth'});
 }
@@ -636,7 +759,8 @@ let openLead = null, leadFilter = 'all';
 function toggleLead(id) { openLead = openLead === id ? null : id; render(); }
 $('leadFilter').onclick = e => {
   const f = e.target.dataset && e.target.dataset.f; if (!f) return;
-  leadFilter = f;
+  if (f === 'cal') { $('calCard').classList.toggle('hidden'); drawCal(); return; }
+  leadFilter = f; calDay = null;
   [...$('leadFilter').children].forEach(a => a.classList.toggle('on', a.dataset.f === f));
   render();
 };
@@ -669,6 +793,259 @@ $('priceSave').onclick = async () => {
   $('priceErr').textContent = saved ? '' : 'Не сохранилось — попробуй ещё раз';
   if (saved) renderPrices();
 };
+
+// ---------- финансы (как в Flowers_Finance_Warsaw.xlsx) ----------
+const PARTNERS = ['Сеня', 'Боря'];
+const DEFAULT_SETTINGS = {
+  delivery: 50,   // фикс водителю за доставку, zł
+  florist: 0,     // % флористки Саши от маржи букета
+  shares: {'Сеня': 50, 'Боря': 50}, // доли чистой прибыли, %
+  pack: [         // расходники на 1 букет: [название, себестоимость zł]
+    ['Бумага упаковочная (8 листов × 0,65)', 5.2],
+    ['Рафия натуральная (3 м × 0,09)', 0.27],
+    ['Chrysal подкормка (2 × 0,34)', 0.68],
+    ['Лента атласная (0,60 + Love You 0,92)', 1.52],
+    ['Пенка флористическая (5 × 1,00)', 5],
+    ['Прочие мелкие расходники', 0.33],
+  ],
+};
+let SETTINGS = DEFAULT_SETTINGS, expenses = [];
+const packTotal = s => Math.round((s.pack || []).reduce((a, p) => a + (+p[1] || 0), 0) * 100) / 100;
+PACK_COST = packTotal(SETTINGS);
+const COURIERS = ['Самовывоз', ...PARTNERS, 'Курьер / такси'];
+const igNick = s => String(s || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, '');
+
+// всё по одному заказу
+function leadCalc(l) {
+  const bought = items.filter(i => i.lead === l.id).reduce((s, i) => s + cost(i), 0);
+  const flowers = l.flowers != null ? l.flowers : bought;
+  const pack = l.pack == null ? PACK_COST : l.pack;
+  const sale = l.sale || 0, costAll = flowers + pack, margin = sale - costAll;
+  const florist = Math.max(0, margin * (SETTINGS.florist || 0) / 100);
+  const net = margin - florist;
+  const share = {}; PARTNERS.forEach(p => share[p] = net * ((SETTINGS.shares || {})[p] || 0) / 100);
+  const back = {}; PARTNERS.forEach(p => back[p] = 0);
+  if (l.paidBy === 'Оба') { back['Сеня'] = l.paidS || 0; back['Боря'] = l.paidB || 0; }
+  else if (PARTNERS.includes(l.paidBy)) back[l.paidBy] = flowers;
+  const deliv = l.deliv || 0;
+  return {bought, flowers, pack, sale, costAll, margin, pct: sale ? margin / sale : 0, florist, net, share, back, deliv, total: sale + deliv};
+}
+
+// ---------- лид: поля оплаты цветов / доставки ----------
+$('lPaidBy').innerHTML = ['', ...PARTNERS, 'Оба'].map(p => `<option value="${p}">${p || '—'}</option>`).join('');
+$('lCourier').innerHTML = COURIERS.map(c => `<option>${c}</option>`).join('');
+$('lPaidBy').onchange = () => $('lSplitWrap').classList.toggle('hidden', $('lPaidBy').value !== 'Оба');
+$('lCourier').onchange = () => { $('lDeliv').value = $('lCourier').value === 'Самовывоз' ? '' : SETTINGS.delivery; };
+
+// ---------- расходы (CAPEX) ----------
+let expEditId = null;
+$('ePaidBy').innerHTML = [...PARTNERS, 'Пополам'].map(p => `<option>${p}</option>`).join('');
+function resetExp() {
+  expEditId = null; ['eSum', 'eWhat', 'eCat'].forEach(id => $(id).value = '');
+  $('eDate').value = todayStr(); $('ePaidBy').value = PARTNERS[0]; $('eSplit').checked = true;
+  $('expBtn').textContent = 'Добавить расход'; $('expEditTitle').classList.add('hidden'); $('expCancel').classList.add('hidden'); $('expErr').textContent = '';
+}
+function editExp(id) {
+  const e = expenses.find(x => x.id === id); if (!e) return;
+  expEditId = id; $('eDate').value = e.date || ''; $('eSum').value = e.sum || ''; $('eWhat').value = e.what || ''; $('eCat').value = e.cat || '';
+  $('ePaidBy').value = e.paidBy; $('eSplit').checked = !!e.split;
+  $('expBtn').textContent = 'Сохранить изменения'; $('expEditTitle').classList.remove('hidden'); $('expCancel').classList.remove('hidden');
+  window.scrollTo(0, 0);
+}
+$('expCancel').onclick = resetExp;
+$('expBtn').onclick = async () => {
+  const f = {date: $('eDate').value, sum: num($('eSum').value), what: $('eWhat').value.trim(), cat: $('eCat').value.trim(),
+             paidBy: $('ePaidBy').value, split: $('ePaidBy').value !== 'Пополам' && $('eSplit').checked};
+  $('expErr').textContent = '';
+  if (!f.what || !f.sum) return $('expErr').textContent = 'Укажи что куплено и сумму';
+  $('expBtn').disabled = true;
+  const id = expEditId;
+  const saved = await mutate(d => {
+    d.expenses = d.expenses || [];
+    if (id) { const x = d.expenses.find(x => x.id === id); if (x) Object.assign(x, f, {editedBy: me(), et: Date.now()}); }
+    else d.expenses.push(Object.assign({id: Date.now().toString(36), t: Date.now(), by: me()}, f));
+  }, (id ? 'Расход изменён: ' : 'Расход: ') + f.what).catch(() => false);
+  $('expBtn').disabled = false;
+  if (!saved) return $('expErr').textContent = 'Не сохранилось — попробуй ещё раз';
+  resetExp();
+};
+async function delExp(id) {
+  if (!await askDel('Удалить расход?')) return;
+  await mutate(d => { d.expenses = (d.expenses || []).filter(e => e.id !== id); }, 'Удалён расход').catch(() => setSync('⚠️ не сохранено', true));
+}
+// кто сколько вложил и кто кому должен (как лист CAPEX_и_Вложения)
+function capexCalc() {
+  const paid = {}, owes = {}; PARTNERS.forEach(p => { paid[p] = 0; owes[p] = 0; });
+  let total = 0;
+  expenses.forEach(e => {
+    total += e.sum || 0;
+    if (e.paidBy === 'Пополам') PARTNERS.forEach(p => paid[p] += (e.sum || 0) / PARTNERS.length);
+    else if (paid[e.paidBy] != null) {
+      paid[e.paidBy] += e.sum || 0;
+      if (e.split) PARTNERS.filter(p => p !== e.paidBy).forEach(p => owes[p] += (e.sum || 0) / 2);
+    }
+  });
+  const [a, b] = PARTNERS, diff = owes[a] - owes[b], dat = {'Сеня': 'Сене', 'Боря': 'Боре'};
+  const saldo = Math.abs(diff) < 0.01 ? 'Все вложения закрыты 50/50 ✅' : diff > 0 ? `👉 ${a} должен перевести ${dat[b]} ${zl(diff)}` : `👉 ${b} должен перевести ${dat[a]} ${zl(-diff)}`;
+  return {paid, owes, total, saldo};
+}
+
+// ---------- отчёт ----------
+let repPeriod = 'month';
+$('repPeriod').onclick = e => {
+  const p = e.target.dataset && e.target.dataset.p; if (!p) return;
+  repPeriod = p; [...$('repPeriod').children].forEach(a => a.classList.toggle('on', a.dataset.p === p)); renderReport();
+};
+const leadDay = l => l.date || new Date(l.t).toLocaleDateString('sv-SE');
+function periodLeads() {
+  const now = new Date(), ym = d => d.toISOString().slice(0, 7);
+  const cur = now.toLocaleDateString('sv-SE').slice(0, 7);
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 15).toLocaleDateString('sv-SE').slice(0, 7);
+  return leads.filter(l => l.sale && (repPeriod === 'all' || leadDay(l).slice(0, 7) === (repPeriod === 'month' ? cur : prev)))
+    .sort((a, b) => leadDay(a).localeCompare(leadDay(b)));
+}
+function renderReport() {
+  const ls = periodLeads(), cs = ls.map(leadCalc);
+  const S = k => cs.reduce((s, c) => s + c[k], 0);
+  const rev = S('sale'), costAll = S('costAll'), margin = S('margin'), deliv = S('deliv');
+  const unpaid = ls.filter(l => !l.paid).reduce((s, l) => s + (l.sale || 0), 0);
+  $('repTop').innerHTML = `
+    <div><b>${zl(rev)}</b><span>выручка</span></div>
+    <div><b>${zl(costAll)}</b><span>себестоимость</span></div>
+    <div><b class="${margin >= 0 ? 'pos' : 'neg'}">${zl(margin)}</b><span>маржа ${rev ? Math.round(margin / rev * 100) : 0}%</span></div>
+    <div><b>${ls.length}</b><span>заказов</span></div>
+    <div><b>${ls.length ? zl(rev / ls.length) : '—'}</b><span>средний чек</span></div>
+    <div><b class="${unpaid ? 'neg' : ''}">${zl(unpaid)}</b><span>не оплачено</span></div>`;
+
+  const florist = S('florist');
+  $('repPeople').innerHTML = PARTNERS.map(p => {
+    const share = cs.reduce((s, c) => s + c.share[p], 0), back = cs.reduce((s, c) => s + c.back[p], 0);
+    const drove = ls.filter(l => l.courier === p).reduce((s, l) => s + (l.deliv || 0), 0);
+    return `<div class="person"><div class="name">${p}</div>
+      <div><span>Доля прибыли ${(SETTINGS.shares || {})[p] || 0}%</span><span>${zl(share)}</span></div>
+      <div><span>Возврат за цветы</span><span>${zl(back)}</span></div>
+      <div><span>За доставку</span><span>${zl(drove)}</span></div>
+      <div><b>Итого к выплате</b><b>${zl(share + back + drove)}</b></div></div>`;
+  }).join('') + `<div class="person"><div class="name">Флористка Саша</div><div><span>${SETTINGS.florist || 0}% от маржи</span><span>${zl(florist)}</span></div></div>
+    <div class="person"><div class="name">Курьер / такси</div><div><span>Доставки</span><span>${zl(ls.filter(l => l.courier === 'Курьер / такси').reduce((s, l) => s + (l.deliv || 0), 0))}</span></div></div>
+    <div class="meta">Всего доставок оплачено клиентами: ${zl(deliv)}</div>`;
+
+  const cx = capexCalc();
+  $('repCapex').innerHTML = `<div><span>Всего вложено</span><b>${zl(cx.total)}</b></div>` +
+    PARTNERS.map(p => `<div><span>Оплатил ${p}</span><span>${zl(cx.paid[p])}</span></div>`).join('') +
+    `<div class="client" style="margin-top:8px">${cx.saldo}</div>`;
+
+  $('repOrders').innerHTML = ls.length ? ls.map((l, k) => { const c = cs[k]; return `<div class="card item">
+    <div><div class="name">${esc(l.name)}</div><div class="meta">${leadDay(l).split('-').reverse().join('.')} · ${esc(l.bouquet || 'букет')}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>
+      <div class="meta">себест. ${zl(c.costAll)} (цветы ${zl(c.flowers)} + упак. ${zl(c.pack)})${l.paidBy ? ' · цветы: ' + esc(l.paidBy) : ''}</div></div>
+    <div class="right"><div class="meta">${zl(c.sale)}</div><div class="per ${c.margin >= 0 ? 'pos' : 'neg'}">${c.margin >= 0 ? '+' : ''}${zl(c.margin)}</div><div class="meta">${Math.round(c.pct * 100)}%</div></div>
+  </div>`; }).join('') : '<div class="card empty">Заказов с ценой за период нет</div>';
+}
+
+// ---------- параметры ----------
+let packDraft = [];
+function fillSettings() {
+  $('sDeliv').value = SETTINGS.delivery; $('sFlorist').value = SETTINGS.florist;
+  $('sShareS').value = (SETTINGS.shares || {})['Сеня']; $('sShareB').value = (SETTINGS.shares || {})['Боря'];
+  packDraft = (SETTINGS.pack || []).map(p => [p[0], p[1]]); drawPack();
+}
+function drawPack() {
+  $('sPack').innerHTML = packDraft.map((p, i) => `<div class="packrow">
+    <input value="${esc(p[0])}" oninput="packDraft[${i}][0]=this.value">
+    <input class="mini" type="number" inputmode="decimal" value="${p[1]}" oninput="packDraft[${i}][1]=num(this.value);packSum()">
+    <button class="del" onclick="packDraft.splice(${i},1);drawPack()">✕</button></div>`).join('');
+  packSum();
+}
+function packSum() { $('sPackTotal').textContent = 'Итого упаковка на 1 букет: ' + zl(packDraft.reduce((a, p) => a + (+p[1] || 0), 0)); }
+$('sPackAdd').onclick = () => { packDraft.push(['', 0]); drawPack(); };
+$('sSave').onclick = async () => {
+  const s = {delivery: num($('sDeliv').value), florist: num($('sFlorist').value),
+             shares: {'Сеня': num($('sShareS').value), 'Боря': num($('sShareB').value)},
+             pack: packDraft.filter(p => String(p[0]).trim()).map(p => [String(p[0]).trim(), +p[1] || 0])};
+  $('sErr').textContent = '';
+  if (Math.round(s.shares['Сеня'] + s.shares['Боря']) !== 100) return $('sErr').textContent = 'Доли Сени и Бори должны давать 100%';
+  $('sSave').disabled = true;
+  const saved = await mutate(d => { d.settings = s; }, 'Параметры обновлены').catch(() => false);
+  $('sSave').disabled = false;
+  $('sErr').textContent = saved ? '' : 'Не сохранилось — попробуй ещё раз';
+};
+
+// ---------- выгрузка в Excel (структура как Flowers_Finance_Warsaw.xlsx) ----------
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, bad) => { const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+}
+$('xlsBtn').onclick = async () => {
+  $('xlsErr').textContent = '';
+  try { await loadXlsx(); } catch (e) { return $('xlsErr').textContent = 'Не удалось загрузить модуль Excel — проверь интернет'; }
+  const ls = periodLeads(), cs = ls.map(leadCalc), r2 = v => Math.round(v * 100) / 100, dd = s => s.split('-').reverse().join('.');
+  const sales = [['№', 'Дата', 'Клиент', 'Букет', 'Кол-во', 'Выручка за букет', 'Себест. цветов', 'Себест. упаковки', 'Полная себест.', 'Маржа PLN', 'Маржа %', 'Кто оплатил цветы', 'Кто вёз', 'Доставка', 'Сумма от клиента', 'Оплачено', 'Способ', 'Телефон', 'Instagram', 'Заметка', 'Добавил']];
+  ls.forEach((l, k) => { const c = cs[k]; sales.push([k + 1, dd(leadDay(l)), l.name, l.bouquet || '', l.qty || '', c.sale, r2(c.flowers), r2(c.pack), r2(c.costAll), r2(c.margin), r2(c.pct * 100), l.paidBy || '', l.courier || '', c.deliv, c.total, l.paid ? 'да' : 'нет', l.pay || '', l.contact || '', l.ig ? '@' + l.ig : '', l.note || '', l.by || '']); });
+  const dist = [['№', 'Дата', 'Заказ', 'Выручка', 'Себестоимость', 'Маржа', 'Доля Саши', 'Чистая прибыль', ...PARTNERS.map(p => 'Доля ' + p), 'Кто вёз', 'Доставка', ...PARTNERS.map(p => 'Возврат за цветы ' + p)]];
+  ls.forEach((l, k) => { const c = cs[k]; dist.push([k + 1, dd(leadDay(l)), l.name, c.sale, r2(c.costAll), r2(c.margin), r2(c.florist), r2(c.net), ...PARTNERS.map(p => r2(c.share[p])), l.courier || '', c.deliv, ...PARTNERS.map(p => r2(c.back[p]))]); });
+  const cx = capexCalc();
+  const capex = [['№', 'Дата', 'Что куплено', 'Категория', 'Сумма', 'Кто оплатил', 'Делить пополам']];
+  expenses.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach((e, k) => capex.push([k + 1, e.date ? dd(e.date) : '', e.what, e.cat || '', e.sum, e.paidBy, e.split ? 'ДА' : 'НЕТ']));
+  capex.push([], ['Итого', '', '', '', cx.total], ...PARTNERS.map(p => ['Оплатил ' + p, '', '', '', r2(cx.paid[p])]), [cx.saldo.replace(/[👉✅]/g, '').trim()]);
+  const buys = [['Дата', 'Цветок', 'Пачек', 'Шт в пачке', 'Цена пачки', 'Всего шт', 'Сумма', 'За 1 шт', 'Для лида', 'Добавил']];
+  items.slice().reverse().forEach(i => buys.push([new Date(i.t).toLocaleDateString('ru-RU'), i.name, i.packs, i.per, i.price, i.packs * i.per, r2(cost(i)), r2(i.price / i.per), (leads.find(l => l.id === i.lead) || {}).name || '', i.by || '']));
+  const params = [['Параметр', 'Значение'], ['Доставка водителю, zł', SETTINGS.delivery], ['Флористка Саша, % от маржи', SETTINGS.florist],
+    ...PARTNERS.map(p => ['Доля ' + p + ', %', (SETTINGS.shares || {})[p]]), [], ['Расходник на 1 букет', 'Себестоимость'], ...SETTINGS.pack, ['ИТОГО упаковка', PACK_COST]];
+  const wb = XLSX.utils.book_new();
+  [['Продажи', sales], ['Распределение_прибыли', dist], ['Закупки', buys], ['CAPEX', capex], ['Параметры', params]]
+    .forEach(([n, rows]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), n));
+  const name = `Lepestok_${{month: 'месяц', prev: 'прошлый_месяц', all: 'всё_время'}[repPeriod]}_${todayStr()}.xlsx`;
+  try { XLSX.writeFile(wb, name); }
+  catch (e) { $('xlsErr').textContent = 'Скачивание не поддерживается здесь — открой приложение на компьютере (Telegram Desktop или web.telegram.org)'; }
+};
+
+// ---------- Instagram: открыть переписку с клиентом ----------
+function openIg(nick) {
+  const url = 'https://ig.me/m/' + nick;
+  if (inTG) { tg.openLink(url); return false; }
+  return true;
+}
+
+// ---------- расходы: список ----------
+function renderExpenses() {
+  const cx = capexCalc();
+  $('expSum').innerHTML = `<div><b>${zl(cx.total)}</b><span>всего</span></div>` +
+    PARTNERS.map(p => `<div><b>${zl(cx.paid[p])}</b><span>оплатил ${p}</span></div>`).join('') +
+    `<div style="grid-column:1/-1"><span>${cx.saldo}</span></div>`;
+  $('expList').innerHTML = expenses.length ? expenses.map(e => `<div class="card item">
+    <div><div class="name">${esc(e.what)}</div>
+      <div class="meta">${e.date ? e.date.split('-').reverse().join('.') : ''}${e.cat ? ' · ' + esc(e.cat) : ''}</div>
+      <div class="meta">оплатил ${esc(e.paidBy)}${e.split ? ' · делим пополам' : ''}</div>
+      ${e.by ? `<div class="by">${byLine(e)}</div>` : ''}
+      <button class="del" onclick="editExp('${e.id}')" style="color:var(--accent);margin-right:14px">✏️ Изменить</button><button class="del" onclick="delExp('${e.id}')">Удалить</button></div>
+    <div class="right"><div class="per">${zl(e.sum)}</div></div>
+  </div>`).join('') : '<div class="card empty">Расходов пока нет</div>';
+}
+
+// ---------- календарь заказов ----------
+let calMonth = new Date(), calDay = null;
+calMonth.setDate(1);
+function drawCal() {
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  $('calTitle').textContent = calMonth.toLocaleDateString('ru-RU', {month: 'long', year: 'numeric'});
+  const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate(), t0 = todayStr();
+  const count = {}; leads.forEach(l => { if (l.date) count[l.date] = (count[l.date] || 0) + 1; });
+  let h = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(d => `<div class="wd">${d}</div>`).join('');
+  for (let k = 0; k < first; k++) h += '<div class="d empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const ds = new Date(y, m, d).toLocaleDateString('sv-SE');
+    h += `<div class="d${ds === t0 ? ' today' : ''}${ds === calDay ? ' sel' : ''}" onclick="pickDay('${ds}')">${d}${count[ds] ? `<i>${count[ds]} 💐</i>` : ''}</div>`;
+  }
+  $('calGrid').innerHTML = h;
+}
+function pickDay(ds) {
+  calDay = calDay === ds ? null : ds;
+  [...$('leadFilter').children].forEach(a => a.classList.toggle('on', !calDay && a.dataset.f === leadFilter));
+  drawCal(); render();
+}
+$('calPrev').onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); drawCal(); };
+$('calNext').onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); drawCal(); };
 
 // ---------- отрисовка ----------
 function render() {
@@ -705,7 +1082,7 @@ function render() {
           <div class="meta">${i.packs * i.per} шт · ${zl(cost(i))}</div>
           ${ln ? `<span class="tag">👤 ${esc(ln)}</span><br>` : ''}
           ${i.by ? `<div class="by">${byLine(i)}</div>` : ''}
-          <button class="del" onclick="delItem('${i.id}')">Удалить</button></div>
+          <button class="del" onclick="editItemForm('${i.id}')" style="color:var(--accent);margin-right:14px">✏️ Изменить</button><button class="del" onclick="delItem('${i.id}')">Удалить</button></div>
         <div class="right"><div class="per">${zl(i.price / i.per)}</div><div class="meta">за 1 шт</div></div>
       </div>`;
     }
@@ -716,21 +1093,21 @@ function render() {
   const q = $('lSearch').value.trim().toLowerCase();
   const t0 = todayStr(), t1 = todayStr(1);
   let list = leads.filter(l =>
-    (leadFilter === 'all' || (leadFilter === 'today' && l.date === t0) || (leadFilter === 'tomorrow' && l.date === t1) || (leadFilter === 'unpaid' && !l.paid)) &&
+    (calDay ? l.date === calDay : leadFilter === 'all' || (leadFilter === 'today' && l.date === t0) || (leadFilter === 'tomorrow' && l.date === t1) || (leadFilter === 'unpaid' && !l.paid)) &&
     (!q || [l.name, l.contact, l.note, l.bouquet].some(v => String(v || '').toLowerCase().includes(q))));
-  if (leadFilter === 'today' || leadFilter === 'tomorrow') list = list.slice().sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  if (calDay || leadFilter === 'today' || leadFilter === 'tomorrow') list = list.slice().sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
   [['today', t0], ['tomorrow', t1]].forEach(([f, d]) => {
     const n = leads.filter(l => l.date === d).length;
     $('leadFilter').querySelector(`[data-f="${f}"]`).textContent = (f === 'today' ? 'Сегодня' : 'Завтра') + (n ? ` (${n})` : '');
   });
 
+  renderExpenses();
+  if (!$('repView').classList.contains('hidden')) renderReport();
+  if (!$('calCard').classList.contains('hidden')) drawCal();
   if (!list.length) return $('leadList').innerHTML = `<div class="card empty">${leads.length ? 'Ничего не найдено' : 'Лидов пока нет'}</div>`;
   $('leadList').innerHTML = list.map(l => {
     const its = items.filter(i => i.lead === l.id);
-    const spent = its.reduce((s, i) => s + cost(i), 0);
-    const pack = l.pack == null ? PACK_COST : l.pack;
-    const costAll = spent + pack;
-    const profit = l.sale - costAll;
+    const c = leadCalc(l), pack = c.pack, costAll = c.costAll, profit = c.margin;
     const open = openLead === l.id;
     const n = clientLeads(l.contact).length;
     const deliv = l.date ? `🚚 ${l.date === t0 ? 'сегодня' : l.date === t1 ? 'завтра' : l.date.split('-').reverse().join('.')}${l.time ? ' ' + l.time : ''}` : '';
@@ -740,6 +1117,8 @@ function render() {
           ${l.bouquet || l.qty ? `<div class="meta">💐 ${esc(l.bouquet || 'Свой букет')}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>` : ''}
           ${deliv ? `<div class="meta">${deliv}</div>` : ''}
           ${l.contact ? `<div class="meta">${esc(l.contact)}</div>` : ''}
+          ${l.ig ? `<div class="meta"><a class="iglink" href="https://ig.me/m/${esc(l.ig)}" onclick="event.stopPropagation();return openIg('${esc(l.ig)}')">📸 @${esc(l.ig)}</a></div>` : ''}
+          ${l.courier && l.courier !== 'Самовывоз' ? `<div class="meta">🚗 ${esc(l.courier)}${l.deliv ? ' · ' + zl(l.deliv) : ''}</div>` : ''}
           ${l.note ? `<div class="meta">${esc(l.note)}</div>` : ''}
           <span class="tag ${l.paid ? 'paid' : 'unpaid'}">${l.paid ? '✅ оплачено' + (l.pay ? ' · ' + esc(l.pay) : '') : '⏳ не оплачено'}</span>
           <div class="meta">${open ? '▲ скрыть' : '▼ подробнее (' + its.length + ' закуп.)'}</div></div>
@@ -752,7 +1131,10 @@ function render() {
       ${open ? `<div class="sub" onclick="event.stopPropagation()">
         ${l.list ? `<div><span>По прайсу</span><span>${zl(l.list)}</span></div>` : ''}
         <div><span>Финальная цена</span><span><input class="mini" id="e_sale_${l.id}" type="number" inputmode="decimal" value="${l.sale || ''}" onchange="editLead('${l.id}','sale')"> zł</span></div>
-        ${its.map(i => `<div><span>${esc(i.name)} — ${i.packs * i.per} шт</span><span>−${zl(cost(i))}</span></div>`).join('') || '<div class="meta">Закупок пока нет</div>'}
+        ${its.map(i => `<div><span>${esc(i.name)} — ${i.packs * i.per} шт</span><span>−${zl(cost(i))}</span></div>`).join('') || (l.flowers == null ? '<div class="meta">Закупок пока нет</div>' : '')}
+        ${l.flowers != null ? `<div><span>Цветы (вписано вручную)</span><span>−${zl(l.flowers)}</span></div>` : ''}
+        ${l.paidBy ? `<div><span>Цветы оплатил</span><span>${esc(l.paidBy)}${l.paidBy === 'Оба' ? ` (${zl(l.paidS || 0)} / ${zl(l.paidB || 0)})` : ''}</span></div>` : ''}
+        ${c.deliv ? `<div><span>Доставка (${esc(l.courier || '')})</span><span>+${zl(c.deliv)}</span></div><div><span>Итого с клиента</span><b>${zl(c.total)}</b></div>` : ''}
         <div><span>Упаковка (себест.)</span><span><input class="mini" id="e_pack_${l.id}" type="number" inputmode="decimal" value="${pack}" onchange="editLead('${l.id}','pack')"> zł</span></div>
         <div><b>Себестоимость</b><b>${zl(costAll)}</b></div>
         ${l.sale ? `<div><b>Прибыль</b><b class="${profit >= 0 ? 'pos' : 'neg'}">${profit >= 0 ? '+' : ''}${zl(profit)}</b></div>` : ''}
