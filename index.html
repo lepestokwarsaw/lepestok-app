@@ -87,6 +87,9 @@
   .calgrid .d i{display:block;font-style:normal;font-size:11px;font-weight:700;color:var(--accent)}
   .calgrid .d.sel i{color:var(--accent-text)}
   .calgrid .d.empty{background:none;cursor:default}
+  .seg{display:flex;background:var(--bg2);border-radius:10px;padding:3px;margin-top:12px}
+  .seg a{flex:1;text-align:center;padding:9px 4px;border-radius:8px;cursor:pointer;color:var(--hint);font-weight:600;font-size:15px}
+  .seg a.on{background:var(--accent);color:var(--accent-text)}
   .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px;margin-top:14px;cursor:pointer}
   .check input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
   select{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
@@ -191,8 +194,9 @@
           <div><label>Финальная цена, zł</label><input id="lSale" type="number" inputmode="decimal" placeholder="250"></div>
           <div><label>Упаковка (себест.), zł</label><input id="lPack" type="number" inputmode="decimal" value="15"></div>
         </div>
+        <div class="seg" id="lMode"><a data-m="pickup" class="on">🏬 Самовывоз</a><a data-m="delivery">🚚 Доставка</a></div>
         <div class="row2">
-          <div><label>Дата доставки</label><input id="lDate" type="date"></div>
+          <div><label id="lDateLbl">Дата самовывоза</label><input id="lDate" type="date"></div>
           <div><label>Время</label><input id="lTime" type="time"></div>
         </div>
         <div class="row2">
@@ -207,9 +211,16 @@
           <div><label>Сеня заплатил, zł</label><input id="lPaidS" type="number" inputmode="decimal"></div>
           <div><label>Боря заплатил, zł</label><input id="lPaidB" type="number" inputmode="decimal"></div>
         </div>
-        <div class="row2">
-          <div><label>Кто везёт</label><select id="lCourier"></select></div>
-          <div><label>Доставка, zł</label><input id="lDeliv" type="number" inputmode="decimal" placeholder="0"></div>
+        <div class="hidden" id="lCourierRow">
+          <div class="row2">
+            <div><label>Кто везёт</label><select id="lCourier"></select></div>
+            <div><label>Водителю, zł</label><input id="lDriver" type="number" inputmode="decimal"></div>
+          </div>
+          <div class="row2">
+            <div><label class="check"><input type="checkbox" id="lPromo"> 🎁 Промо</label></div>
+            <div><label>Клиент платит, zł</label><input id="lDeliv" type="number" inputmode="decimal" placeholder="0"></div>
+          </div>
+          <div class="meta" id="lDelivHint"></div>
         </div>
         <label>Instagram клиента</label><input id="lIg" placeholder="@nickname" autocapitalize="off">
         <label>Заметка (адрес, пожелания)</label><input id="lNote" placeholder="ul. Marszałkowska 1, без зелени">
@@ -279,9 +290,10 @@
       <h2>Параметры</h2>
       <div class="card">
         <div class="row2">
-          <div><label>Доставка водителю, zł</label><input id="sDeliv" type="number" inputmode="decimal"></div>
+          <div><label>Доставка, zł</label><input id="sDeliv" type="number" inputmode="decimal"></div>
           <div><label>Флористке Саше, % от маржи</label><input id="sFlorist" type="number" inputmode="decimal"></div>
         </div>
+        <label>Бесплатная доставка от суммы заказа, zł</label><input id="sFree" type="number" inputmode="decimal">
         <div class="row2">
           <div><label>Доля Сени, %</label><input id="sShareS" type="number" inputmode="decimal"></div>
           <div><label>Доля Бори, %</label><input id="sShareB" type="number" inputmode="decimal"></div>
@@ -661,7 +673,7 @@ function onBouquetChange() {
 }
 function priceFromList() {
   const {price, exact} = priceFor($('lItem').value, num($('lQty').value));
-  if (price) $('lSale').value = price;
+  if (price) { $('lSale').value = price; autoDeliv(); }
   $('lListPrice').textContent = price ? (exact ? 'По прайсу: ' : '≈ по прайсу (пересчёт за штуку): ') + zl(price) + ' — финальную цену можно изменить' : '';
 }
 $('lItem').onchange = onBouquetChange; $('lQty').oninput = priceFromList;
@@ -694,14 +706,17 @@ function readForm() {
           date: $('lDate').value, time: $('lTime').value, paid: $('lPaid').checked, pay: $('lPay').value,
           flowers: $('lFlowers').value === '' ? null : num($('lFlowers').value),
           paidBy: $('lPaidBy').value, paidS: num($('lPaidS').value), paidB: num($('lPaidB').value),
-          courier: $('lCourier').value, deliv: num($('lDeliv').value), ig: igNick($('lIg').value)};
+          courier: leadMode === 'pickup' ? 'Самовывоз' : $('lCourier').value,
+          deliv: leadMode === 'pickup' ? 0 : num($('lDeliv').value),
+          driver: leadMode === 'pickup' ? 0 : num($('lDriver').value), promo: leadMode === 'delivery' && $('lPromo').checked,
+          ig: igNick($('lIg').value)};
 }
 function resetForm() {
   editId = null;
   ['lName', 'lContact', 'lNote', 'lQty', 'lSale', 'lDate', 'lTime'].forEach(id => $(id).value = '');
   $('lItem').value = ''; $('lPack').value = PACK_COST; $('lPaid').checked = false; $('lPay').value = '';
   ['lFlowers', 'lPaidS', 'lPaidB', 'lDeliv', 'lIg'].forEach(id => $(id).value = '');
-  $('lPaidBy').value = ''; $('lCourier').value = 'Самовывоз'; $('lSplitWrap').classList.add('hidden');
+  $('lPaidBy').value = ''; $('lCourier').selectedIndex = 0; $('lSplitWrap').classList.add('hidden'); $('lPromo').checked = false; delivTouched = false; setMode('pickup');
   $('leadBtn').textContent = 'Добавить лида'; $('editTitle').classList.add('hidden'); $('leadCancel').classList.add('hidden');
   $('clientHint').classList.add('hidden'); $('leadErr').textContent = '';
   onBouquetChange();
@@ -717,7 +732,10 @@ function editLeadForm(id) {
   $('lDate').value = l.date || ''; $('lTime').value = l.time || ''; $('lPaid').checked = !!l.paid; $('lPay').value = l.pay || '';
   $('lFlowers').value = l.flowers != null ? l.flowers : ''; $('lPaidBy').value = l.paidBy || '';
   $('lPaidS').value = l.paidS || ''; $('lPaidB').value = l.paidB || ''; $('lSplitWrap').classList.toggle('hidden', l.paidBy !== 'Оба');
-  $('lCourier').value = l.courier || 'Самовывоз'; $('lDeliv').value = l.deliv || ''; $('lIg').value = l.ig ? '@' + l.ig : '';
+  const pick = !l.courier || l.courier === 'Самовывоз';
+  $('lPromo').checked = !!l.promo; $('lDriver').value = l.driver != null ? l.driver : (pick ? '' : l.deliv || '');
+  delivTouched = true; $('lDeliv').value = l.deliv || 0; setMode(pick ? 'pickup' : 'delivery');
+  if (!pick) $('lCourier').value = l.courier; $('lIg').value = l.ig ? '@' + l.ig : '';
   $('leadBtn').textContent = 'Сохранить изменения'; $('editTitle').classList.remove('hidden'); $('leadCancel').classList.remove('hidden');
   showClientHint(); tab('l'); $('leadForm').scrollIntoView({behavior: 'smooth'});
 }
@@ -817,7 +835,8 @@ $('priceSave').onclick = async () => {
 // ---------- финансы (как в Flowers_Finance_Warsaw.xlsx) ----------
 const PARTNERS = ['Сеня', 'Боря'];
 const DEFAULT_SETTINGS = {
-  delivery: 50,   // фикс водителю за доставку, zł
+  delivery: 50,   // доставка: клиенту и водителю, zł
+  freeFrom: 400,  // от этой суммы заказа доставка для клиента бесплатно
   florist: 0,     // % флористки Саши от маржи букета
   shares: {'Сеня': 50, 'Боря': 50}, // доли чистой прибыли, %
   pack: [         // расходники на 1 букет: [название, себестоимость zł]
@@ -840,22 +859,47 @@ function leadCalc(l) {
   const bought = items.filter(i => i.lead === l.id).reduce((s, i) => s + cost(i), 0);
   const flowers = l.flowers != null ? l.flowers : bought;
   const pack = l.pack == null ? PACK_COST : l.pack;
-  const sale = l.sale || 0, costAll = flowers + pack, margin = sale - costAll;
+  const pick = !l.courier || l.courier === 'Самовывоз';
+  const deliv = l.deliv || 0, driver = pick ? 0 : (l.driver != null ? l.driver : deliv);
+  const delivCost = Math.max(0, driver - deliv); // бесплатная/промо доставка — расход магазина
+  const sale = l.sale || 0, costAll = flowers + pack + delivCost, margin = sale - costAll;
   const florist = Math.max(0, margin * (SETTINGS.florist || 0) / 100);
   const net = margin - florist;
   const share = {}; PARTNERS.forEach(p => share[p] = net * ((SETTINGS.shares || {})[p] || 0) / 100);
   const back = {}; PARTNERS.forEach(p => back[p] = 0);
   if (l.paidBy === 'Оба') { back['Сеня'] = l.paidS || 0; back['Боря'] = l.paidB || 0; }
   else if (PARTNERS.includes(l.paidBy)) back[l.paidBy] = flowers;
-  const deliv = l.deliv || 0;
-  return {bought, flowers, pack, sale, costAll, margin, pct: sale ? margin / sale : 0, florist, net, share, back, deliv, total: sale + deliv};
+  return {bought, flowers, pack, sale, costAll, margin, pct: sale ? margin / sale : 0, florist, net, share, back, deliv, driver, delivCost, total: sale + deliv};
 }
 
 // ---------- лид: поля оплаты цветов / доставки ----------
 $('lPaidBy').innerHTML = ['', ...PARTNERS, 'Оба'].map(p => `<option value="${p}">${p || '—'}</option>`).join('');
-$('lCourier').innerHTML = COURIERS.map(c => `<option>${c}</option>`).join('');
+$('lCourier').innerHTML = COURIERS.filter(c => c !== 'Самовывоз').map(c => `<option>${c}</option>`).join('');
+let leadMode = 'pickup';
+function setMode(m) {
+  leadMode = m;
+  [...$('lMode').children].forEach(a => a.classList.toggle('on', a.dataset.m === m));
+  $('lCourierRow').classList.toggle('hidden', m === 'pickup');
+  $('lDateLbl').textContent = m === 'pickup' ? 'Дата самовывоза' : 'Дата доставки';
+  if (m === 'pickup') { $('lDeliv').value = ''; $('lDriver').value = ''; $('lPromo').checked = false; $('lDelivHint').textContent = ''; }
+  else { if ($('lDriver').value === '') $('lDriver').value = SETTINGS.delivery; autoDeliv(); }
+}
+// клиент платит за доставку, кроме промо и заказов от порога (SETTINGS.freeFrom); водителю платим всегда
+let delivTouched = false;
+function autoDeliv() {
+  if (leadMode !== 'delivery') return;
+  const sale = num($('lSale').value), free = $('lPromo').checked || (SETTINGS.freeFrom && sale >= SETTINGS.freeFrom);
+  if (!delivTouched) $('lDeliv').value = free ? 0 : SETTINGS.delivery;
+  $('lDelivHint').textContent = $('lPromo').checked ? '🎁 Промо: доставка для клиента бесплатно, водителю платим мы'
+    : free ? `Заказ от ${SETTINGS.freeFrom} zł — доставка для клиента бесплатно, водителю платим мы`
+    : `Бесплатная доставка от ${SETTINGS.freeFrom} zł или по промо`;
+}
+$('lPromo').onchange = () => { delivTouched = false; autoDeliv(); };
+$('lSale').addEventListener('input', autoDeliv);
+$('lDeliv').oninput = () => { delivTouched = true; };
+$('lMode').onclick = e => { const m = e.target.dataset && e.target.dataset.m; if (m) setMode(m); };
 $('lPaidBy').onchange = () => $('lSplitWrap').classList.toggle('hidden', $('lPaidBy').value !== 'Оба');
-$('lCourier').onchange = () => { $('lDeliv').value = $('lCourier').value === 'Самовывоз' ? '' : SETTINGS.delivery; };
+$('lCourier').onchange = () => { if ($('lDriver').value === '') $('lDriver').value = SETTINGS.delivery; };
 
 // ---------- расходы (CAPEX) ----------
 let expEditId = null;
@@ -940,15 +984,15 @@ function renderReport() {
   const florist = S('florist');
   $('repPeople').innerHTML = PARTNERS.map(p => {
     const share = cs.reduce((s, c) => s + c.share[p], 0), back = cs.reduce((s, c) => s + c.back[p], 0);
-    const drove = ls.filter(l => l.courier === p).reduce((s, l) => s + (l.deliv || 0), 0);
+    const drove = ls.filter(l => l.courier === p).reduce((s, l) => s + leadCalc(l).driver, 0);
     return `<div class="person"><div class="name">${p}</div>
       <div><span>Доля прибыли ${(SETTINGS.shares || {})[p] || 0}%</span><span>${zl(share)}</span></div>
       <div><span>Возврат за цветы</span><span>${zl(back)}</span></div>
       <div><span>За доставку</span><span>${zl(drove)}</span></div>
       <div><b>Итого к выплате</b><b>${zl(share + back + drove)}</b></div></div>`;
   }).join('') + `<div class="person"><div class="name">Флористка Саша</div><div><span>${SETTINGS.florist || 0}% от маржи</span><span>${zl(florist)}</span></div></div>
-    <div class="person"><div class="name">Курьер / такси</div><div><span>Доставки</span><span>${zl(ls.filter(l => l.courier === 'Курьер / такси').reduce((s, l) => s + (l.deliv || 0), 0))}</span></div></div>
-    <div class="meta">Всего доставок оплачено клиентами: ${zl(deliv)}</div>`;
+    <div class="person"><div class="name">Курьер / такси</div><div><span>Доставки</span><span>${zl(ls.filter(l => l.courier === 'Курьер / такси').reduce((s, l) => s + leadCalc(l).driver, 0))}</span></div></div>
+    <div class="meta">Клиенты заплатили за доставку: ${zl(deliv)} · бесплатные/промо доставки стоили нам: ${zl(S('delivCost'))}</div>`;
 
   const cx = capexCalc();
   $('repCapex').innerHTML = `<div><span>Всего вложено</span><b>${zl(cx.total)}</b></div>` +
@@ -965,7 +1009,7 @@ function renderReport() {
 // ---------- параметры ----------
 let packDraft = [];
 function fillSettings() {
-  $('sDeliv').value = SETTINGS.delivery; $('sFlorist').value = SETTINGS.florist;
+  $('sDeliv').value = SETTINGS.delivery; $('sFlorist').value = SETTINGS.florist; $('sFree').value = SETTINGS.freeFrom;
   $('sShareS').value = (SETTINGS.shares || {})['Сеня']; $('sShareB').value = (SETTINGS.shares || {})['Боря'];
   packDraft = (SETTINGS.pack || []).map(p => [p[0], p[1]]); drawPack();
 }
@@ -979,7 +1023,7 @@ function drawPack() {
 function packSum() { $('sPackTotal').textContent = 'Итого упаковка на 1 букет: ' + zl(packDraft.reduce((a, p) => a + (+p[1] || 0), 0)); }
 $('sPackAdd').onclick = () => { packDraft.push(['', 0]); drawPack(); };
 $('sSave').onclick = async () => {
-  const s = {delivery: num($('sDeliv').value), florist: num($('sFlorist').value),
+  const s = {delivery: num($('sDeliv').value), florist: num($('sFlorist').value), freeFrom: num($('sFree').value),
              shares: {'Сеня': num($('sShareS').value), 'Боря': num($('sShareB').value)},
              pack: packDraft.filter(p => String(p[0]).trim()).map(p => [String(p[0]).trim(), +p[1] || 0])};
   $('sErr').textContent = '';
@@ -1000,8 +1044,8 @@ $('xlsBtn').onclick = async () => {
   $('xlsErr').textContent = '';
   try { await loadXlsx(); } catch (e) { return $('xlsErr').textContent = 'Не удалось загрузить модуль Excel — проверь интернет'; }
   const ls = periodLeads(), cs = ls.map(leadCalc), r2 = v => Math.round(v * 100) / 100, dd = s => s.split('-').reverse().join('.');
-  const sales = [['№', 'Дата', 'Клиент', 'Букет', 'Кол-во', 'Выручка за букет', 'Себест. цветов', 'Себест. упаковки', 'Полная себест.', 'Маржа PLN', 'Маржа %', 'Кто оплатил цветы', 'Кто вёз', 'Доставка', 'Сумма от клиента', 'Оплачено', 'Способ', 'Телефон', 'Instagram', 'Заметка', 'Добавил']];
-  ls.forEach((l, k) => { const c = cs[k]; sales.push([k + 1, dd(leadDay(l)), l.name, l.bouquet || '', l.qty || '', c.sale, r2(c.flowers), r2(c.pack), r2(c.costAll), r2(c.margin), r2(c.pct * 100), l.paidBy || '', l.courier || '', c.deliv, c.total, l.paid ? 'да' : 'нет', l.pay || '', l.contact || '', l.ig ? '@' + l.ig : '', l.note || '', l.by || '']); });
+  const sales = [['№', 'Дата', 'Клиент', 'Букет', 'Кол-во', 'Выручка за букет', 'Себест. цветов', 'Себест. упаковки', 'Полная себест.', 'Маржа PLN', 'Маржа %', 'Кто оплатил цветы', 'Кто вёз', 'Доставка (клиент)', 'Водителю', 'Промо', 'Сумма от клиента', 'Оплачено', 'Способ', 'Телефон', 'Instagram', 'Заметка', 'Добавил']];
+  ls.forEach((l, k) => { const c = cs[k]; sales.push([k + 1, dd(leadDay(l)), l.name, l.bouquet || '', l.qty || '', c.sale, r2(c.flowers), r2(c.pack), r2(c.costAll), r2(c.margin), r2(c.pct * 100), l.paidBy || '', l.courier || '', c.deliv, c.driver, l.promo ? 'да' : '', c.total, l.paid ? 'да' : 'нет', l.pay || '', l.contact || '', l.ig ? '@' + l.ig : '', l.note || '', l.by || '']); });
   const dist = [['№', 'Дата', 'Заказ', 'Выручка', 'Себестоимость', 'Маржа', 'Доля Саши', 'Чистая прибыль', ...PARTNERS.map(p => 'Доля ' + p), 'Кто вёз', 'Доставка', ...PARTNERS.map(p => 'Возврат за цветы ' + p)]];
   ls.forEach((l, k) => { const c = cs[k]; dist.push([k + 1, dd(leadDay(l)), l.name, c.sale, r2(c.costAll), r2(c.margin), r2(c.florist), r2(c.net), ...PARTNERS.map(p => r2(c.share[p])), l.courier || '', c.deliv, ...PARTNERS.map(p => r2(c.back[p]))]); });
   const cx = capexCalc();
@@ -1010,7 +1054,7 @@ $('xlsBtn').onclick = async () => {
   capex.push([], ['Итого', '', '', '', cx.total], ...PARTNERS.map(p => ['Оплатил ' + p, '', '', '', r2(cx.paid[p])]), [cx.saldo.replace(/[👉✅]/g, '').trim()]);
   const buys = [['Дата', 'Цветок', 'Пачек', 'Шт в пачке', 'Цена пачки', 'Всего шт', 'Сумма', 'За 1 шт', 'Для лида', 'Добавил']];
   items.slice().reverse().forEach(i => buys.push([new Date(i.t).toLocaleDateString('ru-RU'), i.name, i.packs, i.per, i.price, i.packs * i.per, r2(cost(i)), r2(i.price / i.per), (leads.find(l => l.id === i.lead) || {}).name || '', i.by || '']));
-  const params = [['Параметр', 'Значение'], ['Доставка водителю, zł', SETTINGS.delivery], ['Флористка Саша, % от маржи', SETTINGS.florist],
+  const params = [['Параметр', 'Значение'], ['Доставка, zł', SETTINGS.delivery], ['Бесплатная доставка от, zł', SETTINGS.freeFrom], ['Флористка Саша, % от маржи', SETTINGS.florist],
     ...PARTNERS.map(p => ['Доля ' + p + ', %', (SETTINGS.shares || {})[p]]), [], ['Расходник на 1 букет', 'Себестоимость'], ...SETTINGS.pack, ['ИТОГО упаковка', PACK_COST]];
   const wb = XLSX.utils.book_new();
   [['Продажи', sales], ['Распределение_прибыли', dist], ['Закупки', buys], ['CAPEX', capex], ['Параметры', params]]
@@ -1130,7 +1174,8 @@ function render() {
     const c = leadCalc(l), pack = c.pack, costAll = c.costAll, profit = c.margin;
     const open = openLead === l.id;
     const n = clientLeads(l.contact).length;
-    const deliv = l.date ? `🚚 ${l.date === t0 ? 'сегодня' : l.date === t1 ? 'завтра' : l.date.split('-').reverse().join('.')}${l.time ? ' ' + l.time : ''}` : '';
+    const pick = !l.courier || l.courier === 'Самовывоз';
+    const deliv = l.date ? `${pick ? '🏬 самовывоз' : '🚚 доставка'} ${l.date === t0 ? 'сегодня' : l.date === t1 ? 'завтра' : l.date.split('-').reverse().join('.')}${l.time ? ' ' + l.time : ''}` : '';
     return `<div class="card lead" onclick="toggleLead('${l.id}')">
       <div class="item">
         <div><div class="name">${esc(l.name)}${n > 1 ? ` <span class="tag">⭐ ${n} заказ.</span>` : ''}</div>
@@ -1138,7 +1183,7 @@ function render() {
           ${deliv ? `<div class="meta">${deliv}</div>` : ''}
           ${l.contact ? `<div class="meta">${esc(l.contact)}</div>` : ''}
           ${l.ig ? `<div class="meta"><a class="iglink" href="https://ig.me/m/${esc(l.ig)}" onclick="event.stopPropagation();return openIg('${esc(l.ig)}')">📸 @${esc(l.ig)}</a></div>` : ''}
-          ${l.courier && l.courier !== 'Самовывоз' ? `<div class="meta">🚗 ${esc(l.courier)}${l.deliv ? ' · ' + zl(l.deliv) : ''}</div>` : ''}
+          ${l.courier && l.courier !== 'Самовывоз' ? `<div class="meta">🚗 ${esc(l.courier)} · ${l.promo ? '🎁 промо' : l.deliv ? 'доставка ' + zl(l.deliv) : 'доставка бесплатно'}</div>` : ''}
           ${l.note ? `<div class="meta">${esc(l.note)}</div>` : ''}
           <span class="tag ${l.paid ? 'paid' : 'unpaid'}">${l.paid ? '✅ оплачено' + (l.pay ? ' · ' + esc(l.pay) : '') : '⏳ не оплачено'}</span>
           <div class="meta">${open ? '▲ скрыть' : '▼ подробнее (' + its.length + ' закуп.)'}</div></div>
@@ -1154,7 +1199,9 @@ function render() {
         ${its.map(i => `<div><span>${esc(i.name)} — ${i.packs * i.per} шт</span><span>−${zl(cost(i))}</span></div>`).join('') || (l.flowers == null ? '<div class="meta">Закупок пока нет</div>' : '')}
         ${l.flowers != null ? `<div><span>Цветы (вписано вручную)</span><span>−${zl(l.flowers)}</span></div>` : ''}
         ${l.paidBy ? `<div><span>Цветы оплатил</span><span>${esc(l.paidBy)}${l.paidBy === 'Оба' ? ` (${zl(l.paidS || 0)} / ${zl(l.paidB || 0)})` : ''}</span></div>` : ''}
-        ${c.deliv ? `<div><span>Доставка (${esc(l.courier || '')})</span><span>+${zl(c.deliv)}</span></div><div><span>Итого с клиента</span><b>${zl(c.total)}</b></div>` : ''}
+        ${c.driver ? `<div><span>Доставка (${esc(l.courier || '')})${l.promo ? ' 🎁 промо' : !c.deliv ? ' бесплатно' : ''}</span><span>клиент ${zl(c.deliv)} · водителю ${zl(c.driver)}</span></div>` : ''}
+        ${c.delivCost ? `<div><span>Доставка за наш счёт</span><span>−${zl(c.delivCost)}</span></div>` : ''}
+        ${c.deliv ? `<div><span>Итого с клиента</span><b>${zl(c.total)}</b></div>` : ''}
         <div><span>Упаковка (себест.)</span><span><input class="mini" id="e_pack_${l.id}" type="number" inputmode="decimal" value="${pack}" onchange="editLead('${l.id}','pack')"> zł</span></div>
         <div><b>Себестоимость</b><b>${zl(costAll)}</b></div>
         ${l.sale ? `<div><b>Прибыль</b><b class="${profit >= 0 ? 'pos' : 'neg'}">${profit >= 0 ? '+' : ''}${zl(profit)}</b></div>` : ''}
