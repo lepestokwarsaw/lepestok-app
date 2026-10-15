@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Закупка цветов</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg: var(--tg-theme-bg-color, #fff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f2f2f6);
+    --text: var(--tg-theme-text-color, #111);
+    --hint: var(--tg-theme-hint-color, #888);
+    --accent: var(--tg-theme-button-color, #d0457a);
+    --accent-text: var(--tg-theme-button-text-color, #fff);
+    --danger: #e0453a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg2);color:var(--text);font-size:16px}
+  .wrap{max-width:520px;margin:0 auto;padding:16px}
+  h1{font-size:20px;margin:4px 0 16px}
+  h2{font-size:15px;color:var(--hint);text-transform:uppercase;letter-spacing:.04em;margin:20px 4px 8px;font-weight:600}
+  .card{background:var(--bg);border-radius:14px;padding:14px;margin-bottom:10px}
+  label{display:block;font-size:13px;color:var(--hint);margin:8px 0 4px}
+  input{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-text);font-size:16px;font-weight:600;margin-top:12px;cursor:pointer}
+  button.ghost{background:transparent;color:var(--hint);font-weight:400;margin-top:4px}
+  .calc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .calc div{background:var(--bg2);border-radius:10px;padding:8px;text-align:center}
+  .calc b{display:block;font-size:17px}
+  .calc span{font-size:12px;color:var(--hint)}
+  .item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .item .name{font-weight:600}
+  .item .meta{font-size:13px;color:var(--hint);margin-top:2px}
+  .item .right{text-align:right;white-space:nowrap}
+  .item .per{font-size:18px;font-weight:700;color:var(--accent)}
+  .del{background:none;border:0;color:var(--danger);font-size:13px;padding:4px 0;margin:4px 0 0;width:auto}
+  .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .sum div{text-align:center}.sum b{display:block;font-size:18px}.sum span{font-size:12px;color:var(--hint)}
+  .err{color:var(--danger);font-size:14px;min-height:18px;margin-top:8px}
+  .empty{color:var(--hint);text-align:center;padding:20px}
+  .hidden{display:none}
+  #splash{position:fixed;inset:0;z-index:9;background:#fbeee6;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s}
+  #splash.gone{opacity:0;pointer-events:none}
+  .petal{width:46px;animation:sway 1.6s ease-in-out infinite;transform-origin:50% 100%}
+  @keyframes sway{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
+  .splash-name{font-family:Georgia,serif;font-style:italic;font-size:34px;color:#b8475f;margin-top:10px}
+  .bar{width:140px;height:3px;background:rgba(184,71,95,.2);border-radius:3px;margin-top:18px;overflow:hidden}
+  .bar i{display:block;height:100%;width:40%;background:#b8475f;border-radius:3px;animation:load 1s ease-in-out infinite}
+  @keyframes load{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+  .logo-wrap{text-align:center;margin:40px 0 24px}
+  .logo{width:220px;max-width:70%;display:block;margin:0 auto}
+  .brand{color:var(--hint);margin-top:10px;font-size:14px;letter-spacing:.05em}
+  .hint{font-size:14px;color:var(--hint);margin:0 0 4px}
+  input.mini{width:90px;padding:5px 8px;font-size:15px;text-align:right;display:inline-block}
+  .lead .sub div{align-items:center}
+  .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px;margin-top:14px;cursor:pointer}
+  .check input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
+  select{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .tabs{display:flex;background:var(--bg);border-radius:12px;padding:4px;margin-bottom:12px}
+  .tabs a{flex:1;text-align:center;padding:9px;border-radius:9px;color:var(--hint);cursor:pointer;font-weight:600}
+  .tabs a.on{background:var(--accent);color:var(--accent-text)}
+  .tag{display:inline-block;font-size:12px;background:var(--bg2);border-radius:6px;padding:2px 6px;margin-top:4px}
+  .lead{cursor:pointer}
+  .lead .sub{border-top:1px solid rgba(128,128,128,.2);margin-top:10px;padding-top:8px;font-size:14px}
+  .lead .sub div{display:flex;justify-content:space-between;padding:2px 0}
+  .pos{color:#2a9d4b}.neg{color:var(--danger)}
+  button.small{width:auto;padding:8px 12px;font-size:14px;margin:8px 8px 0 0}
+  .day{font-size:13px;color:var(--hint);margin:14px 4px 6px}
+</style>
+</head>
+<body>
+<div id="splash">
+  <svg class="petal" viewBox="0 0 40 60"><ellipse cx="20" cy="30" rx="14" ry="24" fill="#b8475f"/></svg>
+  <div class="splash-name">lepestok</div>
+  <div class="bar"><i></i></div>
+</div>
+<div class="wrap">
+
+  <!-- ВХОД -->
+  <div id="auth" class="hidden">
+    <div class="logo-wrap">
+      <svg class="logo" viewBox="0 0 300 120" role="img" aria-label="lepestok">
+        <rect x="0" y="0" width="300" height="120" rx="14" fill="#b8475f"/>
+        <text x="150" y="86" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-style="italic" font-size="62" fill="#fbeee6">lepestok</text>
+        <ellipse cx="252" cy="30" rx="10" ry="15" transform="rotate(35 252 30)" fill="#fbeee6"/>
+      </svg>
+      <div class="brand">Lepestok.warsaw</div>
+    </div>
+    <div class="card" id="loginCard">
+      <p id="authHint" class="hint hidden"></p>
+      <label>Логин</label><input id="login" autocomplete="username" autocapitalize="off">
+      <label>Пароль</label><input id="pass" type="password" autocomplete="current-password">
+      <div id="setupWrap" class="hidden">
+        <label>Повтори пароль</label><input id="pass2" type="password">
+        <label>Пароль администратора (снимает блокировку)</label><input id="adminNew" type="password">
+      </div>
+      <label class="check" id="rememberWrap"><input type="checkbox" id="remember" checked> Запомнить меня</label>
+      <div class="err" id="authErr"></div>
+      <button id="authBtn">Войти</button>
+    </div>
+    <div class="card hidden" id="lockCard">
+      <p class="hint">⛔ 3 неверных пароля — вход заблокирован. Введи пароль администратора, чтобы снять блокировку.</p>
+      <label>Пароль администратора</label><input id="adminPass" type="password">
+      <div class="err" id="lockErr"></div>
+      <button id="unlockBtn">Снять блокировку</button>
+    </div>
+  </div>
+
+  <!-- ПРИЛОЖЕНИЕ -->
+  <div id="app" class="hidden">
+    <h1>🌸 Закупка цветов</h1>
+    <div class="tabs"><a id="tabP" class="on">Закупки</a><a id="tabL">Лиды</a></div>
+
+    <!-- ЛИДЫ -->
+    <div id="leadsView" class="hidden">
+      <div class="card">
+        <label>Имя клиента</label><input id="lName" placeholder="Анна">
+        <label>Телефон / Instagram</label><input id="lContact" placeholder="+48 …">
+        <div class="row2">
+          <div><label>Букет по прайсу</label><select id="lItem"></select></div>
+          <div><label>Количество</label><select id="lQty"></select></div>
+        </div>
+        <div class="row2">
+          <div><label>Финальная цена, zł</label><input id="lSale" type="number" inputmode="decimal" placeholder="250"></div>
+          <div><label>Упаковка (себест.), zł</label><input id="lPack" type="number" inputmode="decimal" value="15"></div>
+        </div>
+        <div class="meta" id="lListPrice"></div>
+        <label>Заметка (дата, пожелания)</label><input id="lNote" placeholder="20.10, без зелени">
+        <div class="err" id="leadErr"></div>
+        <button id="leadBtn">Добавить лида</button>
+      </div>
+      <div id="leadList"></div>
+    </div>
+
+    <!-- ЗАКУПКИ -->
+    <div id="purchView">
+    <div class="card">
+      <label>Для лида</label>
+      <select id="fLead"></select>
+      <label>Цветок</label><input id="fName" placeholder="Роза Эквадор 60см" list="names">
+      <datalist id="names"></datalist>
+      <div class="row">
+        <div><label>Пачек</label><input id="fPacks" type="number" inputmode="decimal" value="1" min="0"></div>
+        <div><label>Шт в пачке</label><input id="fPer" type="number" inputmode="numeric" placeholder="25"></div>
+        <div><label>Цена пачки, zł</label><input id="fPrice" type="number" inputmode="decimal" placeholder="50"></div>
+      </div>
+      <div class="calc">
+        <div><b id="cStem">—</b><span>за 1 шт</span></div>
+        <div><b id="cQty">—</b><span>всего шт</span></div>
+        <div><b id="cTotal">—</b><span>сумма</span></div>
+      </div>
+      <div class="err" id="addErr"></div>
+      <button id="addBtn">Добавить закупку</button>
+    </div>
+
+    <h2>Итого</h2>
+    <div class="card sum">
+      <div><b id="sTotal">0 zł</b><span>потрачено</span></div>
+      <div><b id="sQty">0</b><span>штук</span></div>
+      <div><b id="sAvg">—</b><span>средн. за шт</span></div>
+    </div>
+
+    <h2>История</h2>
+    <div id="list"></div>
+    </div>
+
+    <button class="ghost" id="logoutBtn">Выйти</button>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+const inTG = !!(tg && tg.initData);
+if (tg) { tg.ready(); tg.expand(); }
+
+// ---------- хранилище: Telegram CloudStorage (синхронно на всех устройствах) или localStorage ----------
+const store = {
+  get(keys) {
+    if (inTG) return new Promise(r => tg.CloudStorage.getItems(keys, (e, v) => r(e ? {} : v)));
+    const o = {}; keys.forEach(k => o[k] = localStorage.getItem(k) || ''); return Promise.resolve(o);
+  },
+  set(k, v) {
+    if (inTG) return new Promise((r, j) => tg.CloudStorage.setItem(k, v, e => e ? j(e) : r()));
+    localStorage.setItem(k, v); return Promise.resolve();
+  },
+  del(k) {
+    if (inTG) return new Promise(r => tg.CloudStorage.removeItem(k, () => r()));
+    localStorage.removeItem(k); return Promise.resolve();
+  },
+  keys() {
+    if (inTG) return new Promise(r => tg.CloudStorage.getKeys((e, k) => r(e ? [] : k)));
+    return Promise.resolve(Object.keys(localStorage));
+  }
+};
+
+const $ = id => document.getElementById(id);
+const num = v => parseFloat(String(v).replace(',', '.')) || 0;
+const zl = n => (Math.round(n * 100) / 100).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' zł';
+
+// ---------- вход ----------
+// Без сервера и без журнала. Логин/пароль задаются при первом запуске и хранятся
+// только хешем в облаке Telegram этого аккаунта — в публичном коде их нет.
+// 3 неверных пароля → блокировка, снимается паролем администратора.
+const MAX_FAILS = 3;
+let auth = null; // {login, hash, admin, salt}
+let fails = 0, locked = false;
+
+async function sha(s) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+const hashPass = (login, pass) => sha(auth.salt + '|' + login + '|' + pass);
+
+async function initAuth() {
+  const [v] = await Promise.all([store.get(['auth', 'fails', 'locked', 'remember']), new Promise(r => setTimeout(r, 1300))]);
+  auth = v.auth ? JSON.parse(v.auth) : null;
+  fails = Number(v.fails || 0); locked = v.locked === '1';
+  $('splash').classList.add('gone');
+  if (auth && !locked && (sessionStorage.getItem('ok') === '1' || v.remember === auth.hash)) {
+    sessionStorage.setItem('ok', '1'); return showApp();
+  }
+  $('auth').classList.remove('hidden');
+  if (!auth) {
+    $('authHint').textContent = 'Первый запуск: придумай логин, пароль и пароль администратора.';
+    $('authHint').classList.remove('hidden'); $('setupWrap').classList.remove('hidden');
+    $('authBtn').textContent = 'Сохранить и войти';
+  }
+  showLock();
+}
+function showLock() {
+  $('loginCard').classList.toggle('hidden', locked); $('lockCard').classList.toggle('hidden', !locked);
+}
+
+$('authBtn').onclick = async () => {
+  const l = $('login').value.trim(), p = $('pass').value;
+  $('authErr').textContent = '';
+  if (!l || !p) return $('authErr').textContent = 'Введи логин и пароль';
+
+  if (!auth) { // первый запуск — создаём учётку
+    const a = $('adminNew').value;
+    if (p.length < 6) return $('authErr').textContent = 'Пароль минимум 6 символов';
+    if (p !== $('pass2').value) return $('authErr').textContent = 'Пароли не совпадают';
+    if (a.length < 4 || a === p) return $('authErr').textContent = 'Пароль администратора: минимум 4 символа и не такой, как основной';
+    auth = {login: l, salt: crypto.getRandomValues(new Uint32Array(4)).join('-')};
+    auth.hash = await hashPass(l, p);
+    auth.admin = await sha(auth.salt + '|admin|' + a);
+    await store.set('auth', JSON.stringify(auth));
+  } else if (l !== auth.login || (await hashPass(l, p)) !== auth.hash) {
+    fails++;
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+    if (fails >= MAX_FAILS) {
+      locked = true;
+      await Promise.all([store.set('locked', '1'), store.set('fails', String(fails))]);
+      return showLock();
+    }
+    await store.set('fails', String(fails));
+    return $('authErr').textContent = 'Неверный логин или пароль. Осталось попыток: ' + (MAX_FAILS - fails);
+  }
+  fails = 0; await store.del('fails');
+  sessionStorage.setItem('ok', '1');
+  if ($('remember').checked) await store.set('remember', auth.hash);
+  showApp();
+};
+
+$('unlockBtn').onclick = async () => {
+  $('lockErr').textContent = '';
+  if ((await sha(auth.salt + '|admin|' + $('adminPass').value)) !== auth.admin)
+    return $('lockErr').textContent = 'Неверный пароль администратора';
+  locked = false; fails = 0;
+  await Promise.all([store.del('locked'), store.del('fails')]);
+  $('adminPass').value = ''; $('pass').value = '';
+  showLock();
+};
+
+$('logoutBtn').onclick = async () => { sessionStorage.removeItem('ok'); await store.del('remember'); location.reload(); };
+
+// ---------- данные: закупки (p_) и лиды (l_) ----------
+let items = [], leads = [];
+const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cost = i => i.packs * i.price;
+const askDel = q => new Promise(r => inTG ? tg.showConfirm(q, r) : r(confirm(q)));
+const ok = () => tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success');
+
+async function load() {
+  const keys = (await store.keys()).filter(k => k.startsWith('p_') || k.startsWith('l_'));
+  const vals = keys.length ? await store.get(keys) : {};
+  const parse = k => { try { return JSON.parse(vals[k]); } catch { return null; } };
+  items = keys.filter(k => k[0] === 'p').map(parse).filter(Boolean).sort((a, b) => b.t - a.t);
+  leads = keys.filter(k => k[0] === 'l').map(parse).filter(Boolean).sort((a, b) => b.t - a.t);
+  render();
+}
+
+// ---------- вкладки ----------
+function tab(name) {
+  $('tabP').classList.toggle('on', name === 'p'); $('tabL').classList.toggle('on', name === 'l');
+  $('purchView').classList.toggle('hidden', name !== 'p'); $('leadsView').classList.toggle('hidden', name !== 'l');
+}
+$('tabP').onclick = () => tab('p'); $('tabL').onclick = () => tab('l');
+
+// ---------- закупки ----------
+function calc() {
+  const packs = num($('fPacks').value), per = num($('fPer').value), price = num($('fPrice').value);
+  const qty = packs * per, total = packs * price, stem = per ? price / per : 0;
+  $('cStem').textContent = per && price ? zl(stem) : '—';
+  $('cQty').textContent = qty ? qty : '—';
+  $('cTotal').textContent = total ? zl(total) : '—';
+  return {packs, per, price, qty, total, stem};
+}
+['fPacks', 'fPer', 'fPrice'].forEach(id => $(id).oninput = calc);
+
+$('addBtn').onclick = async () => {
+  const name = $('fName').value.trim(), c = calc();
+  $('addErr').textContent = '';
+  if (!name || !c.packs || !c.per || !c.price) return $('addErr').textContent = 'Заполни все поля';
+  const it = {id: Date.now().toString(36), t: Date.now(), name, packs: c.packs, per: c.per, price: c.price, lead: $('fLead').value};
+  try { await store.set('p_' + it.id, JSON.stringify(it)); }
+  catch (e) { return $('addErr').textContent = 'Ошибка сохранения: ' + e; }
+  items.unshift(it);
+  $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1';
+  calc(); render(); ok();
+};
+
+async function delItem(id) {
+  if (!await askDel('Удалить закупку?')) return;
+  await store.del('p_' + id);
+  items = items.filter(i => i.id !== id); render();
+}
+
+// ---------- прайс-лист (НАШ ПРАЙСЛИСТ 10.2026): цена букета за N штук, 0 = нет в прайсе ----------
+const SIZES = [5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const PRICES = [
+  ['Роза (обычная)', '40 см', [59, 99, 139, 179, 259, 0, 399, 0, 0, 0, 0, 599]],
+  ['Роза (обычная)', '60 см', [79, 139, 199, 249, 349, 0, 549, 0, 0, 0, 0, 899]],
+  ['Роза (обычная)', '90 см', [99, 169, 249, 319, 449, 0, 699, 0, 0, 0, 0, 1299]],
+  ['Гортензия', 'Средняя шапка', [279, 489, 699, 879]],
+  ['Гортензия', 'Крупная шапка', [329, 579, 829, 1049]],
+  ['Хризантема', 'Стандарт', [59, 119, 169, 219, 299, 399, 479]],
+  ['Гвоздика', 'Стандарт', [49, 79, 119, 149, 219, 279, 349]],
+  ['Гвоздика кустовая', 'Стандарт', [69, 119, 169, 219, 309, 389, 459]],
+  ['Эустома', '50 см', [99, 179, 249, 319, 449, 579, 719]],
+  ['Эустома', '60 см', [99, 179, 249, 319, 449, 579, 719]],
+  ['Эустома', '70 см', [119, 199, 279, 359, 499]],
+  ['Георгина', 'Стандарт', [0, 149, 0, 269, 389]],
+  ['Гипсофила', 'Стандарт', [89, 149, 219, 279, 399]],
+];
+const PACK_COST = 15; // себестоимость упаковки, zł
+const itemName = i => PRICES[i][0] + (PRICES[i][1] === 'Стандарт' ? '' : ' ' + PRICES[i][1]);
+const listPrice = (i, q) => i === '' ? 0 : (PRICES[i][2][SIZES.indexOf(q)] || 0);
+
+$('lItem').innerHTML = '<option value="">— свой букет —</option>' + PRICES.map((p, i) => `<option value="${i}">${itemName(i)}</option>`).join('');
+function fillQty() {
+  const i = $('lItem').value;
+  $('lQty').innerHTML = i === '' ? '<option value="">—</option>'
+    : SIZES.map((s, k) => PRICES[i][2][k] ? `<option value="${s}">${s} шт — ${PRICES[i][2][k]} zł</option>` : '').join('');
+  priceFromList();
+}
+function priceFromList() {
+  const p = listPrice($('lItem').value, Number($('lQty').value));
+  $('lSale').value = p || '';
+  $('lListPrice').textContent = p ? 'По прайсу: ' + zl(p) + ' — финальную цену можно изменить' : '';
+}
+$('lItem').onchange = fillQty; $('lQty').onchange = priceFromList;
+fillQty();
+
+// ---------- лиды ----------
+$('leadBtn').onclick = async () => {
+  const name = $('lName').value.trim();
+  $('leadErr').textContent = '';
+  if (!name) return $('leadErr').textContent = 'Укажи имя';
+  const i = $('lItem').value, q = Number($('lQty').value) || 0;
+  const l = {id: Date.now().toString(36), t: Date.now(), name, contact: $('lContact').value.trim(), note: $('lNote').value.trim(),
+             bouquet: i === '' ? '' : itemName(i), qty: i === '' ? 0 : q, list: listPrice(i, q),
+             sale: num($('lSale').value), pack: $('lPack').value === '' ? PACK_COST : num($('lPack').value)};
+  try { await store.set('l_' + l.id, JSON.stringify(l)); }
+  catch (e) { return $('leadErr').textContent = 'Ошибка сохранения: ' + e; }
+  leads.unshift(l);
+  ['lName', 'lContact', 'lNote'].forEach(id => $(id).value = '');
+  $('lItem').value = ''; $('lPack').value = PACK_COST; fillQty();
+  render(); ok();
+};
+
+// изменить финальную цену / упаковку у существующего лида
+async function editLead(id, field) {
+  const l = leads.find(x => x.id === id);
+  const v = num($('e_' + field + '_' + id).value);
+  if (l[field] === v) return;
+  l[field] = v;
+  await store.set('l_' + l.id, JSON.stringify(l));
+  render(); ok();
+}
+
+async function delLead(id) {
+  if (!await askDel('Удалить лида? Закупки останутся, но без привязки.')) return;
+  await store.del('l_' + id);
+  leads = leads.filter(l => l.id !== id);
+  for (const i of items.filter(i => i.lead === id)) { i.lead = ''; await store.set('p_' + i.id, JSON.stringify(i)); }
+  render();
+}
+
+function buyFor(id) {
+  tab('p'); $('fLead').value = id; $('fName').focus(); window.scrollTo(0, 0);
+}
+
+let openLead = null;
+function toggleLead(id) { openLead = openLead === id ? null : id; render(); }
+
+// ---------- отрисовка ----------
+function render() {
+  const leadName = id => (leads.find(l => l.id === id) || {}).name;
+
+  // выбор лида в форме закупки
+  const cur = $('fLead').value;
+  $('fLead').innerHTML = '<option value="">— без лида (на склад) —</option>' +
+    leads.map(l => `<option value="${l.id}">${esc(l.name)}${l.note ? ' · ' + esc(l.note) : ''}</option>`).join('');
+  $('fLead').value = leads.some(l => l.id === cur) ? cur : '';
+
+  // итого
+  let total = 0, qty = 0;
+  items.forEach(i => { total += cost(i); qty += i.packs * i.per; });
+  $('sTotal').textContent = zl(total); $('sQty').textContent = qty; $('sAvg').textContent = qty ? zl(total / qty) : '—';
+  $('names').innerHTML = [...new Set(items.map(i => i.name))].map(n => `<option value="${esc(n)}">`).join('');
+
+  // история закупок
+  if (!items.length) $('list').innerHTML = '<div class="card empty">Пока пусто</div>';
+  else {
+    let html = '', day = '';
+    for (const i of items) {
+      const d = new Date(i.t).toLocaleDateString('ru-RU', {day: 'numeric', month: 'long', year: 'numeric'});
+      if (d !== day) { day = d; html += `<div class="day">${d}</div>`; }
+      const ln = leadName(i.lead);
+      html += `<div class="card item">
+        <div><div class="name">${esc(i.name)}</div>
+          <div class="meta">${i.packs} пач. × ${i.per} шт × ${zl(i.price)}</div>
+          <div class="meta">${i.packs * i.per} шт · ${zl(cost(i))}</div>
+          ${ln ? `<span class="tag">👤 ${esc(ln)}</span><br>` : ''}
+          <button class="del" onclick="delItem('${i.id}')">Удалить</button></div>
+        <div class="right"><div class="per">${zl(i.price / i.per)}</div><div class="meta">за 1 шт</div></div>
+      </div>`;
+    }
+    $('list').innerHTML = html;
+  }
+
+  // лиды
+  if (!leads.length) return $('leadList').innerHTML = '<div class="card empty">Лидов пока нет</div>';
+  $('leadList').innerHTML = leads.map(l => {
+    const its = items.filter(i => i.lead === l.id);
+    const spent = its.reduce((s, i) => s + cost(i), 0);
+    const pack = l.pack == null ? PACK_COST : l.pack;
+    const costAll = spent + pack;
+    const profit = l.sale - costAll;
+    const open = openLead === l.id;
+    return `<div class="card lead" onclick="toggleLead('${l.id}')">
+      <div class="item">
+        <div><div class="name">${esc(l.name)}</div>
+          ${l.bouquet ? `<div class="meta">💐 ${esc(l.bouquet)}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>` : ''}
+          ${l.contact ? `<div class="meta">${esc(l.contact)}</div>` : ''}
+          ${l.note ? `<div class="meta">${esc(l.note)}</div>` : ''}
+          <div class="meta">${open ? '▲ скрыть' : '▼ подробнее (' + its.length + ' закуп.)'}</div></div>
+        <div class="right">
+          ${l.sale ? `<div class="meta">цена ${zl(l.sale)}</div>` : ''}
+          <div class="meta">себест. ${zl(costAll)}</div>
+          ${l.sale ? `<div class="per ${profit >= 0 ? 'pos' : 'neg'}">${profit >= 0 ? '+' : ''}${zl(profit)}</div>` : ''}
+        </div>
+      </div>
+      ${open ? `<div class="sub" onclick="event.stopPropagation()">
+        ${l.list ? `<div><span>По прайсу</span><span>${zl(l.list)}</span></div>` : ''}
+        <div><span>Финальная цена</span><span><input class="mini" id="e_sale_${l.id}" type="number" inputmode="decimal" value="${l.sale || ''}" onchange="editLead('${l.id}','sale')"> zł</span></div>
+        ${its.map(i => `<div><span>${esc(i.name)} — ${i.packs * i.per} шт</span><span>−${zl(cost(i))}</span></div>`).join('') || '<div class="meta">Закупок пока нет</div>'}
+        <div><span>Упаковка (себест.)</span><span><input class="mini" id="e_pack_${l.id}" type="number" inputmode="decimal" value="${pack}" onchange="editLead('${l.id}','pack')"> zł</span></div>
+        <div><b>Себестоимость</b><b>${zl(costAll)}</b></div>
+        ${l.sale ? `<div><b>Прибыль</b><b class="${profit >= 0 ? 'pos' : 'neg'}">${profit >= 0 ? '+' : ''}${zl(profit)}</b></div>` : ''}
+        <button class="small" onclick="buyFor('${l.id}')">+ Закупка для лида</button>
+        <button class="del" onclick="delLead('${l.id}')">Удалить лида</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function showApp() { $('auth').classList.add('hidden'); $('app').classList.remove('hidden'); load(); }
+initAuth();
+</script>
+</body>
+</html>
