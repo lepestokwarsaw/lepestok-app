@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Закупка цветов</title>
+<title>Lepestok — учёт</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
@@ -43,8 +43,10 @@
   .hidden{display:none}
   #splash{position:fixed;inset:0;z-index:9;background:#fbeee6;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s}
   #splash.gone{opacity:0;pointer-events:none}
-  .petal{width:46px;animation:sway 1.6s ease-in-out infinite;transform-origin:50% 100%}
-  @keyframes sway{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
+  .daisy{width:110px;height:180px;filter:drop-shadow(0 4px 8px rgba(120,60,70,.18));animation:sway 2.2s ease-in-out infinite;transform-origin:50% 100%;overflow:visible}
+  .daisy .head{animation:bloom 2.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+  @keyframes sway{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+  @keyframes bloom{0%,100%{scale:1}50%{scale:1.06}}
   .splash-name{font-family:Georgia,serif;font-style:italic;font-size:34px;color:#b8475f;margin-top:10px}
   .bar{width:140px;height:3px;background:rgba(184,71,95,.2);border-radius:3px;margin-top:18px;overflow:hidden}
   .bar i{display:block;height:100%;width:40%;background:#b8475f;border-radius:3px;animation:load 1s ease-in-out infinite}
@@ -127,11 +129,98 @@
     .tabs a{font-size:12px;padding:8px 1px}
     .sizes{grid-template-columns:repeat(3,1fr)}
   }
+
+  /* ================= оформление Lepestok ================= */
+  :root{
+    --accent:#b8475f; --accent-2:#d9768a; --accent-text:#fff; --cream:#fbeee6;
+    --ok:#2f8f4e; --danger:#d2433a;
+    --line:rgba(120,80,90,.14); --shadow:0 1px 2px rgba(80,30,45,.06),0 6px 18px rgba(80,30,45,.06);
+  }
+  body{background:var(--tg-theme-secondary-bg-color, linear-gradient(180deg,#fbeee6 0,#f6f1f3 260px,#f4f2f5 100%));background-attachment:fixed;-webkit-font-smoothing:antialiased}
+  .wrap{padding-bottom:40px}
+  .top{display:flex;align-items:center;gap:12px;margin:6px 2px 14px}
+  .top-daisy{width:40px;height:40px;filter:drop-shadow(0 2px 3px rgba(80,30,45,.18));animation:sway 3s ease-in-out infinite;transform-origin:50% 50%}
+  .top-name{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:28px;line-height:1;color:var(--accent)}
+  .top-sub{font-size:12px;color:var(--hint);letter-spacing:.06em;margin-top:3px}
+  #sync{font-size:12px;margin:-6px 4px 12px!important;display:inline-block;padding:3px 10px;border-radius:20px;background:var(--bg);box-shadow:var(--shadow)}
+  #sync.neg{color:var(--danger)}
+
+  .tabs{position:sticky;top:6px;z-index:5;background:var(--bg);border-radius:14px;padding:4px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--line)}
+  .tabs a{border-radius:10px;transition:background .2s,color .2s;font-weight:600}
+  .tabs a.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 2px 8px rgba(184,71,95,.35)}
+
+  .card{border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow);border:1px solid var(--line)}
+  h2{font-size:12px;letter-spacing:.09em;margin:22px 6px 8px;color:var(--accent);opacity:.85}
+  label{font-weight:500}
+  input, select{border-radius:12px!important;border:1px solid var(--line)!important;transition:border-color .15s, box-shadow .15s;outline:none}
+  input:focus, select:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(184,71,95,.15);background:var(--bg)}
+  button{border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 4px 14px rgba(184,71,95,.28);transition:transform .08s, box-shadow .15s}
+  button:active{transform:scale(.98);box-shadow:0 2px 6px rgba(184,71,95,.25)}
+  button:disabled{opacity:.6}
+  button.ghost, button.del{background:none;box-shadow:none}
+  button.ghost{color:var(--hint)}
+  button.small{background:var(--bg2);color:var(--accent);box-shadow:none;border:1px solid var(--line);border-radius:12px;font-weight:600}
+
+  .calc div, .sum > div{background:var(--bg2);border-radius:14px;padding:10px 6px;text-align:center}
+  .sum{gap:8px}
+  .sum b{font-size:17px}
+  .calc b{color:var(--accent)}
+
+  .chips a{border:1px solid var(--line);font-weight:500;transition:background .2s}
+  .chips a.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  input.search{background:var(--bg)!important;box-shadow:var(--shadow)}
+
+  .item .per{color:var(--accent)}
+  .pos{color:var(--ok)!important}.neg{color:var(--danger)!important}
+  .tag{border-radius:20px;padding:3px 9px;font-weight:600;font-size:12px}
+  .tag.paid{background:#e4f5ea;color:var(--ok)}.tag.unpaid{background:#fde9e7;color:var(--danger)}
+  .lead{border-left:4px solid var(--accent-2);transition:transform .1s}
+  .lead:active{transform:scale(.995)}
+  .lead .sub{border-top:1px dashed var(--line);margin-top:12px;padding-top:10px}
+  .lead .sub > div{padding:4px 0;gap:12px}
+  .lead .sub > div > span:last-child{text-align:right}
+  .day{font-weight:600;color:var(--accent);opacity:.8}
+  .seg{border:1px solid var(--line);padding:4px}
+  .seg a.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 2px 8px rgba(184,71,95,.3)}
+  .client{border:1px solid #f3dc9a}
+  .person .name{color:var(--accent)}
+  .calgrid .d{border:1px solid var(--line)}
+  .calgrid .d.sel{background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  .chat{border:1px solid var(--line)}
+  #splash{background:radial-gradient(circle at 50% 40%,#fff 0,#fbeee6 60%,#f5dfe3 100%)}
+  .splash-name{margin-top:6px;font-size:38px}
+  .logo-wrap .logo{filter:drop-shadow(0 6px 14px rgba(184,71,95,.25))}
+
+  @media (prefers-color-scheme: dark){
+    :root{--line:rgba(255,255,255,.08);--shadow:none}
+    body{background:var(--tg-theme-secondary-bg-color,#1b1a1d)}
+    .tag.paid{background:rgba(47,143,78,.18)}.tag.unpaid{background:rgba(210,67,58,.18)}
+    .client{background:rgba(245,197,66,.12);color:#f5d27a;border-color:rgba(245,197,66,.25)}
+  }
 </style>
 </head>
 <body>
 <div id="splash">
-  <svg class="petal" viewBox="0 0 40 60"><ellipse cx="20" cy="30" rx="14" ry="24" fill="#b8475f"/></svg>
+  <svg class="daisy" viewBox="0 0 120 200" aria-hidden="true">
+    <path d="M60 196 C58 160 64 130 60 92" stroke="#5f8f4e" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M61 150 C76 136 92 138 98 128 C84 124 68 132 61 150Z" fill="#7aa865"/>
+    <path d="M59 168 C46 158 32 160 26 152 C38 146 52 152 59 168Z" fill="#6d9c5a"/>
+    <g class="head" transform="translate(60 62)">
+      <g fill="#fffdf8" stroke="#dcc6b8" stroke-width="1.4">
+        <ellipse rx="9" ry="27" transform="rotate(0) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(25.7) translate(0 -27)"/>
+        <ellipse rx="9" ry="27" transform="rotate(51.4) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(77.1) translate(0 -27)"/>
+        <ellipse rx="9" ry="27" transform="rotate(102.8) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(128.5) translate(0 -27)"/>
+        <ellipse rx="9" ry="27" transform="rotate(154.2) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(180) translate(0 -27)"/>
+        <ellipse rx="9" ry="27" transform="rotate(205.7) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(231.4) translate(0 -27)"/>
+        <ellipse rx="9" ry="27" transform="rotate(257.1) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(282.8) translate(0 -27)"/>
+        <ellipse rx="9" ry="27" transform="rotate(308.5) translate(0 -27)"/><ellipse rx="9" ry="27" transform="rotate(334.2) translate(0 -27)"/>
+      </g>
+      <circle r="15" fill="#f5c542"/>
+      <circle r="15" fill="url(#dc)"/>
+      <g fill="#d99a1e"><circle cx="-5" cy="-4" r="1.6"/><circle cx="4" cy="-6" r="1.6"/><circle cx="7" cy="3" r="1.6"/><circle cx="-2" cy="6" r="1.6"/><circle cx="-8" cy="3" r="1.4"/><circle cx="1" cy="0" r="1.4"/></g>
+    </g>
+    <defs><radialGradient id="dc"><stop offset="0" stop-color="#ffe08a"/><stop offset="1" stop-color="#e9a92b" stop-opacity=".6"/></radialGradient></defs>
+  </svg>
   <div class="splash-name">lepestok</div>
   <div class="bar"><i></i></div>
 </div>
@@ -175,7 +264,13 @@
 
   <!-- ПРИЛОЖЕНИЕ -->
   <div id="app" class="hidden">
-    <h1>🌸 Закупка цветов</h1>
+    <header class="top">
+      <svg class="top-daisy" viewBox="-34 -34 68 68" aria-hidden="true"><g fill="#fffdf8" stroke="#eadfd2">
+        <ellipse rx="7" ry="18" transform="translate(0 -15)"/><ellipse rx="7" ry="18" transform="rotate(45) translate(0 -15)"/><ellipse rx="7" ry="18" transform="rotate(90) translate(0 -15)"/><ellipse rx="7" ry="18" transform="rotate(135) translate(0 -15)"/>
+        <ellipse rx="7" ry="18" transform="rotate(180) translate(0 -15)"/><ellipse rx="7" ry="18" transform="rotate(225) translate(0 -15)"/><ellipse rx="7" ry="18" transform="rotate(270) translate(0 -15)"/><ellipse rx="7" ry="18" transform="rotate(315) translate(0 -15)"/>
+      </g><circle r="10" fill="#f5c542"/></svg>
+      <div><div class="top-name">lepestok</div><div class="top-sub">учёт магазина · Warsaw</div></div>
+    </header>
     <div class="meta" id="sync" style="margin:-10px 4px 10px"></div>
     <div class="tabs"><a id="tabP" class="on">Закупки</a><a id="tabL">Лиды</a><a id="tabE">Расходы</a><a id="tabO">Отчёт</a><a id="tabR">Прайс</a></div>
 
