@@ -13,6 +13,10 @@
  *   TG_BOT_TOKEN   — токен @LepestokWarsawBot
  *   TG_CHAT_ID     — куда слать уведомления и откуда принимать ответы: твой id или id группы
  *   TG_SECRET      — любая строка, защищает /tg (передаётся Telegram при setWebhook)
+ *
+ * KV (binding IG_KV): ключ 'ig_token' = {token, expires_at, refreshed_at} — продлённый токен.
+ * Cron Trigger "0 6 * * 1" → scheduled(): раз в неделю продлевает токен (живёт ~60 дней).
+ * Ручной запуск: /refresh?key=TG_SECRET
  */
 const DATA_REPO = 'lepestokwarsaw/lepestok-data';
 const DATA_API = `https://api.github.com/repos/${DATA_REPO}/contents/data.json`;
@@ -36,12 +40,43 @@ export default {
         const r = await tg(env, 'setWebhook', {url: url.origin + '/tg', secret_token: env.TG_SECRET, allowed_updates: ['message']});
         return json(await r.json());
       }
+      if (url.pathname === '/refresh') {
+        if (!env.TG_SECRET || url.searchParams.get('key') !== env.TG_SECRET) return new Response('forbidden', {status: 403});
+        return json(await refreshToken(env));
+      }
     } catch (e) {
       return json({error: String(e.message || e)}, 500, url.pathname === '/send' ? cors : {});
     }
     return new Response('Lepestok Instagram ⇄ Telegram', {status: 200});
   },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(refreshToken(env).catch(async e => {
+      if (env.TG_BOT_TOKEN && env.TG_CHAT_ID)
+        await tg(env, 'sendMessage', {chat_id: env.TG_CHAT_ID, text: '⚠️ Не удалось продлить Instagram-токен: ' + e.message + '\nОбнови секрет IG_TOKEN вручную, иначе Instagram перестанет работать.'});
+    }));
+  },
 };
+
+// ---------------- Instagram-токен (продление) ----------------
+const KV_TOKEN = 'ig_token';
+async function getToken(env) {
+  if (env.IG_KV) {
+    const v = await env.IG_KV.get(KV_TOKEN, 'json');
+    if (v && v.token) return v.token;
+  }
+  return env.IG_TOKEN;
+}
+async function refreshToken(env) {
+  if (!env.IG_KV) throw new Error('нет KV-привязки IG_KV');
+  const cur = await getToken(env);
+  if (!cur) throw new Error('нет токена');
+  const r = await fetch('https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=' + encodeURIComponent(cur));
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error('Instagram: ' + ((j.error && j.error.message) || r.status));
+  const rec = {token: j.access_token, expires_at: Date.now() + (j.expires_in || 0) * 1000, refreshed_at: Date.now()};
+  await env.IG_KV.put(KV_TOKEN, JSON.stringify(rec));
+  return {ok: true, expires_in: j.expires_in, expires_at: new Date(rec.expires_at).toISOString()};
+}
 
 // ---------------- Instagram → лиды ----------------
 async function igWebhook(req, url, env) {
@@ -80,9 +115,10 @@ async function validSignature(raw, header, secret) {
 }
 
 async function igProfile(igId, env) {
-  if (!env.IG_TOKEN) return {};
+  const token = await getToken(env);
+  if (!token) return {};
   try {
-    const r = await fetch(`${GRAPH}/${igId}?fields=username,name&access_token=${env.IG_TOKEN}`);
+    const r = await fetch(`${GRAPH}/${igId}?fields=username,name&access_token=${token}`);
     return r.ok ? await r.json() : {};
   } catch { return {}; }
 }
@@ -151,7 +187,7 @@ async function saveMessages(events, env, notify) {
 // ---------------- отправка в Instagram ----------------
 async function igSend(env, igId, text) {
   const r = await fetch(`${GRAPH}/me/messages`, {method: 'POST',
-    headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + env.IG_TOKEN},
+    headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + (await getToken(env))},
     body: JSON.stringify({recipient: {id: igId}, message: {text}})});
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
