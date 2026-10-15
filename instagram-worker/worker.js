@@ -30,6 +30,12 @@ export default {
       if (url.pathname === '/ig') return await igWebhook(req, url, env);
       if (url.pathname === '/send') return await sendFromApp(req, env);
       if (url.pathname === '/tg') return await tgWebhook(req, env);
+      // однократная привязка бота: /setup?key=TG_SECRET — сервер сам вызывает setWebhook своим токеном
+      if (url.pathname === '/setup') {
+        if (!env.TG_SECRET || url.searchParams.get('key') !== env.TG_SECRET) return new Response('forbidden', {status: 403});
+        const r = await tg(env, 'setWebhook', {url: url.origin + '/tg', secret_token: env.TG_SECRET, allowed_updates: ['message']});
+        return json(await r.json());
+      }
     } catch (e) {
       return json({error: String(e.message || e)}, 500, url.pathname === '/send' ? cors : {});
     }
