@@ -98,6 +98,21 @@
   .item > div:first-child{min-width:0;flex:1}
   .name, .meta, .by, .chat p, .client{overflow-wrap:anywhere;word-break:break-word}
   .item .right{flex-shrink:0;max-width:45%}
+  .chat p.me{text-align:right;background:rgba(184,71,95,.08);border-radius:10px;padding:4px 8px;margin-left:24px}
+  .chat p:not(.me){background:var(--bg);border-radius:10px;padding:4px 8px;margin-right:24px}
+  .reply{display:flex;gap:6px;align-items:flex-end;padding:0!important}
+  .reply textarea{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:9px 10px;font:inherit;font-size:15px;background:var(--bg2);color:var(--text);resize:vertical}
+  .reply button.small{margin:0;height:42px;width:46px;font-size:18px}
+  .photo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .photo-btn{display:inline-block;margin:0;padding:10px 14px;border-radius:12px;border:1px dashed var(--accent);color:var(--accent)!important;font-weight:600;cursor:pointer;font-size:14px}
+  #fPhotoPrev{width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+  .photo-link{background:none!important;box-shadow:none!important;color:var(--accent)!important;padding:2px 0!important;margin:2px 0 0!important;width:auto!important;font-size:13px!important;font-weight:600;cursor:pointer}
+  #photoView{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px}
+  #photoView.hidden{display:none}
+  #photoView img{max-width:100%;max-height:85vh;border-radius:12px;background:#222;min-width:60px;min-height:60px}
+  #photoView span{color:#ddd;font-size:13px}
+  .catrow{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:4px 0;flex-wrap:wrap}
+  #fCat a{font-size:13px;padding:8px 2px}
   .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px;margin-top:14px;cursor:pointer}
   .check input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
   select{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
@@ -381,6 +396,8 @@
       <div class="card sum" id="repTop"></div>
       <h2>Кому сколько</h2>
       <div class="card" id="repPeople"></div>
+      <h2>Упаковка, бумага, ленты</h2>
+      <div class="card" id="repSupplies"></div>
       <h2>Вложения (CAPEX)</h2>
       <div class="card" id="repCapex"></div>
       <h2>Заказы</h2>
@@ -411,20 +428,28 @@
     <!-- ЗАКУПКИ -->
     <div id="purchView">
     <div class="card">
+      <div class="seg" id="fCat" style="margin-top:0"></div>
       <label>Для лида</label>
       <select id="fLead"></select>
-      <label>Цветок</label><input id="fName" placeholder="Роза Эквадор 60см" list="names">
+      <label id="fNameLbl">Цветок</label><input id="fName" placeholder="Роза Эквадор 60см" list="names">
       <datalist id="names"></datalist>
       <div class="row">
-        <div><label>Пачек</label><input id="fPacks" type="number" inputmode="decimal" value="1" min="0"></div>
-        <div><label>Шт в пачке</label><input id="fPer" type="number" inputmode="numeric" placeholder="25"></div>
-        <div><label>Цена пачки, zł</label><input id="fPrice" type="number" inputmode="decimal" placeholder="50"></div>
+        <div><label id="fPacksLbl">Пачек</label><input id="fPacks" type="number" inputmode="decimal" value="1" min="0"></div>
+        <div><label id="fPerLbl">Шт в пачке</label><input id="fPer" type="number" inputmode="decimal" placeholder="25"></div>
+        <div><label id="fPriceLbl">Цена пачки, zł</label><input id="fPrice" type="number" inputmode="decimal" placeholder="50"></div>
       </div>
       <div class="calc">
-        <div><b id="cStem">—</b><span>за 1 шт</span></div>
-        <div><b id="cQty">—</b><span>всего шт</span></div>
+        <div><b id="cStem">—</b><span id="cStemLbl">за 1 шт</span></div>
+        <div><b id="cQty">—</b><span id="cQtyLbl">всего шт</span></div>
         <div><b id="cTotal">—</b><span>сумма</span></div>
       </div>
+      <label>Фото (чек / товар) — сжимается автоматически</label>
+      <div class="photo-row">
+        <label class="photo-btn">📷 Прикрепить фото<input id="fPhoto" type="file" accept="image/*" hidden></label>
+        <img id="fPhotoPrev" class="hidden" alt="">
+        <button class="del hidden" id="fPhotoDel" type="button">убрать</button>
+      </div>
+      <div class="meta" id="fPhotoInfo"></div>
       <div class="err" id="addErr"></div>
       <button id="addBtn">Добавить закупку</button>
       <button class="ghost hidden" id="addCancel">Отменить редактирование</button>
@@ -432,14 +457,17 @@
 
     <h2>Итого</h2>
     <div class="card sum">
-      <div><b id="sTotal">0 zł</b><span>потрачено</span></div>
-      <div><b id="sQty">0</b><span>штук</span></div>
-      <div><b id="sAvg">—</b><span>средн. за шт</span></div>
+      <div><b id="sTotal">0 zł</b><span>потрачено всего</span></div>
+      <div><b id="sQty">0</b><span>цветов, шт</span></div>
+      <div><b id="sAvg">—</b><span>средн. за цветок</span></div>
     </div>
+    <div class="card" id="sCats"></div>
 
     <h2>История</h2>
+    <div class="chips" id="pFilter"></div>
     <div id="list"></div>
     </div>
+    <div id="photoView" class="hidden" onclick="this.classList.add('hidden')"><img id="photoImg" alt=""><span>нажми, чтобы закрыть</span></div>
 
     <button class="ghost" id="changeTokenBtn">🔑 Сменить ключ доступа</button>
     <button class="ghost" id="logoutBtn">Выйти</button>
@@ -684,10 +712,87 @@ function tab(name) {
 }
 $('tabP').onclick = () => tab('p'); $('tabL').onclick = () => tab('l'); $('tabR').onclick = () => tab('r'); $('tabE').onclick = () => tab('e'); $('tabO').onclick = () => tab('o');
 
+// ---------- закупки: категории ----------
+const CATS = {
+  flowers: {n: '💐 Цветы', name: 'Цветок', ph: 'Роза Эквадор 60см', pk: 'Пачек', per: 'Шт в пачке', pr: 'Цена пачки, zł', u: 'шт'},
+  paper:   {n: '📜 Бумага', name: 'Бумага', ph: 'Бумага крафт 60×60', pk: 'Упаковок', per: 'Листов в упак.', pr: 'Цена упак., zł', u: 'лист'},
+  ribbon:  {n: '🎀 Лента', name: 'Лента', ph: 'Лента атлас 2,5 см', pk: 'Рулонов', per: 'Метров в рулоне', pr: 'Цена рулона, zł', u: 'м'},
+  other:   {n: '📦 Другое', name: 'Что куплено', ph: 'Пенка, Chrysal…', pk: 'Упаковок', per: 'Шт в упак.', pr: 'Цена упак., zł', u: 'шт'},
+};
+const catOf = i => CATS[i.cat] ? i.cat : 'flowers';
+let fCat = 'flowers', pFilter = 'all';
+$('fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<a data-c="${k}">${c.n}</a>`).join('');
+function setCat(k) {
+  fCat = k; const c = CATS[k];
+  [...$('fCat').children].forEach(a => a.classList.toggle('on', a.dataset.c === k));
+  $('fNameLbl').textContent = c.name; $('fName').placeholder = c.ph;
+  $('fPacksLbl').textContent = c.pk; $('fPerLbl').textContent = c.per; $('fPriceLbl').textContent = c.pr;
+  $('cStemLbl').textContent = 'за 1 ' + c.u; $('cQtyLbl').textContent = 'всего, ' + c.u;
+  render && items && $('names') && ($('names').innerHTML = [...new Set(items.filter(i => catOf(i) === k).map(i => i.name))].map(n => `<option value="${esc(n)}">`).join(''));
+}
+$('fCat').onclick = e => { const k = e.target.dataset && e.target.dataset.c; if (k) setCat(k); };
+$('pFilter').innerHTML = [['all', 'Все'], ...Object.entries(CATS).map(([k, c]) => [k, c.n])].map(([k, n]) => `<a data-p="${k}"${k === 'all' ? ' class="on"' : ''}>${n}</a>`).join('');
+$('pFilter').onclick = e => { const k = e.target.dataset && e.target.dataset.p; if (!k) return; pFilter = k;
+  [...$('pFilter').children].forEach(a => a.classList.toggle('on', a.dataset.p === k)); render(); };
+setCat('flowers');
+
+// ---------- фото: сжатие и хранение в приватном репо (photos/*.jpg) ----------
+let photoBlob = null, photoKeep = null; // новое сжатое фото / путь уже сохранённого
+function compressImage(file, maxSide = 1280, quality = 0.72) {
+  return new Promise((ok, bad) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(b => b ? ok(b) : bad(new Error('не удалось сжать')), 'image/jpeg', quality);
+    };
+    img.onerror = () => bad(new Error('это не картинка'));
+    img.src = url;
+  });
+}
+const kb = n => Math.round(n / 1024) + ' КБ';
+$('fPhoto').onchange = async () => {
+  const f = $('fPhoto').files[0]; if (!f) return;
+  $('fPhotoInfo').textContent = 'Сжимаю…';
+  try {
+    photoBlob = await compressImage(f);
+    $('fPhotoPrev').src = URL.createObjectURL(photoBlob); $('fPhotoPrev').classList.remove('hidden'); $('fPhotoDel').classList.remove('hidden');
+    $('fPhotoInfo').textContent = `Сжато: ${kb(f.size)} → ${kb(photoBlob.size)}`;
+  } catch (e) { photoBlob = null; $('fPhotoInfo').textContent = '⚠️ ' + e.message; }
+  $('fPhoto').value = '';
+};
+function clearPhoto() {
+  photoBlob = null; photoKeep = null; $('fPhotoPrev').classList.add('hidden'); $('fPhotoPrev').removeAttribute('src');
+  $('fPhotoDel').classList.add('hidden'); $('fPhotoInfo').textContent = '';
+}
+$('fPhotoDel').onclick = clearPhoto;
+async function uploadPhoto(blob, id) {
+  const buf = new Uint8Array(await blob.arrayBuffer()); let bin = '';
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  const p = `photos/${id}-${Date.now().toString(36)}.jpg`;
+  const r = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/${p}`, {method: 'PUT', headers: ghHeaders({'Content-Type': 'application/json'}),
+    body: JSON.stringify({message: 'Фото закупки', content: btoa(bin)})});
+  if (!r.ok) throw new Error('фото не загрузилось (' + r.status + ')');
+  return p;
+}
+const photoCache = {};
+async function showPhoto(p) {
+  $('photoView').classList.remove('hidden'); $('photoImg').removeAttribute('src');
+  try {
+    if (!photoCache[p]) {
+      const r = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/${p}`, {headers: ghHeaders({Accept: 'application/vnd.github.raw'})});
+      if (!r.ok) throw new Error(r.status);
+      photoCache[p] = URL.createObjectURL(await r.blob());
+    }
+    $('photoImg').src = photoCache[p];
+  } catch (e) { $('photoView').classList.add('hidden'); setSync('⚠️ фото не открылось', true); }
+}
+
 // ---------- закупки ----------
 function calc() {
   const packs = num($('fPacks').value), per = num($('fPer').value), price = num($('fPrice').value);
-  const qty = packs * per, total = packs * price, stem = per ? price / per : 0;
+  const qty = Math.round(packs * per * 100) / 100, total = packs * price, stem = per ? price / per : 0;
   $('cStem').textContent = per && price ? zl(stem) : '—';
   $('cQty').textContent = qty ? qty : '—';
   $('cTotal').textContent = total ? zl(total) : '—';
@@ -697,13 +802,15 @@ function calc() {
 
 let itemEditId = null;
 function resetItemForm() {
-  itemEditId = null; $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1';
+  itemEditId = null; $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1'; clearPhoto();
   $('addBtn').textContent = 'Добавить закупку'; $('addCancel').classList.add('hidden'); $('addErr').textContent = '';
   calc();
 }
 function editItemForm(id) {
   const i = items.find(x => x.id === id); if (!i) return;
   itemEditId = id; tab('p');
+  setCat(catOf(i)); clearPhoto(); photoKeep = i.photo || null;
+  if (photoKeep) { $('fPhotoInfo').textContent = '📷 фото прикреплено — можно заменить или убрать'; $('fPhotoDel').classList.remove('hidden'); }
   $('fName').value = i.name; $('fPacks').value = i.packs; $('fPer').value = i.per; $('fPrice').value = i.price; $('fLead').value = i.lead || '';
   $('addBtn').textContent = 'Сохранить изменения'; $('addCancel').classList.remove('hidden'); calc(); window.scrollTo(0, 0);
 }
@@ -712,12 +819,19 @@ $('addBtn').onclick = async () => {
   const name = $('fName').value.trim(), c = calc();
   $('addErr').textContent = '';
   if (!name || !c.packs || !c.per || !c.price) return $('addErr').textContent = 'Заполни все поля';
-  const f = {name, packs: c.packs, per: c.per, price: c.price, lead: $('fLead').value}, id = itemEditId;
+  const f = {name, cat: fCat, packs: c.packs, per: c.per, price: c.price, lead: $('fLead').value, photo: photoKeep}, id = itemEditId;
   $('addBtn').disabled = true;
+  if (photoBlob) {
+    $('addBtn').textContent = 'Загружаю фото…';
+    try { f.photo = await uploadPhoto(photoBlob, id || 'p'); }
+    catch (e) { $('addBtn').disabled = false; $('addBtn').textContent = id ? 'Сохранить изменения' : 'Добавить закупку'; return $('addErr').textContent = '⚠️ ' + e.message; }
+  }
+  if (!f.photo) delete f.photo;
   const saved = await mutate(d => {
-    if (id) { const x = d.items.find(x => x.id === id); if (x) Object.assign(x, f, {editedBy: me(), et: Date.now()}); }
+    if (id) { const x = d.items.find(x => x.id === id); if (x) { if (!f.photo) delete x.photo; Object.assign(x, f, {editedBy: me(), et: Date.now()}); } }
     else d.items.push(Object.assign({id: Date.now().toString(36), t: Date.now(), by: me()}, f));
   }, (id ? 'Закупка изменена: ' : 'Закупка: ') + name).catch(() => false);
+  $('addBtn').textContent = id ? 'Сохранить изменения' : 'Добавить закупку';
   $('addBtn').disabled = false;
   if (!saved) return $('addErr').textContent = 'Не сохранилось — проверь интернет и попробуй ещё раз';
   resetItemForm();
@@ -1107,6 +1221,17 @@ function renderReport() {
     <div class="person"><div class="name">Курьер / такси</div><div><span>Доставки</span><span>${zl(ls.filter(l => l.courier === 'Курьер / такси').reduce((s, l) => s + leadCalc(l).driver, 0))}</span></div></div>
     <div class="meta">Клиенты заплатили за доставку: ${zl(deliv)} · бесплатные/промо доставки стоили нам: ${zl(S('delivCost'))}</div>`;
 
+  // расходники за период: сколько куплено и по какой цене
+  const now = new Date(), curM = now.toLocaleDateString('sv-SE').slice(0, 7), prevM = new Date(now.getFullYear(), now.getMonth() - 1, 15).toLocaleDateString('sv-SE').slice(0, 7);
+  const its = items.filter(i => catOf(i) !== 'flowers' && (repPeriod === 'all' || new Date(i.t).toLocaleDateString('sv-SE').slice(0, 7) === (repPeriod === 'month' ? curM : prevM)));
+  $('repSupplies').innerHTML = its.length ? ['paper', 'ribbon', 'other'].map(k => {
+    const g = its.filter(i => catOf(i) === k); if (!g.length) return '';
+    const c = CATS[k], sum = g.reduce((a, i) => a + cost(i), 0), q = g.reduce((a, i) => a + i.packs * i.per, 0);
+    return `<div class="person"><div class="name">${c.n}</div>
+      ${g.map(i => `<div><span>${new Date(i.t).toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit'})} · ${esc(i.name)} — ${Math.round(i.packs * i.per * 100) / 100} ${c.u} по ${zl(i.price / i.per)}${i.photo ? ` <a class="photo-link" onclick="showPhoto('${esc(i.photo)}')">📷</a>` : ''}</span><span>${zl(cost(i))}</span></div>`).join('')}
+      <div><b>Итого ${Math.round(q * 100) / 100} ${c.u}, средняя ${zl(sum / q)}/${c.u}</b><b>${zl(sum)}</b></div></div>`;
+  }).join('') : '<div class="meta">Закупок бумаги, лент и расходников за период нет</div>';
+
   const cx = capexCalc();
   $('repCapex').innerHTML = `<div><span>Всего вложено</span><b>${zl(cx.total)}</b></div>` +
     PARTNERS.map(p => `<div><span>Оплатил ${p}</span><span>${zl(cx.paid[p])}</span></div>`).join('') +
@@ -1165,8 +1290,8 @@ $('xlsBtn').onclick = async () => {
   const capex = [['№', 'Дата', 'Что куплено', 'Категория', 'Сумма', 'Кто оплатил', 'Делить пополам']];
   expenses.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach((e, k) => capex.push([k + 1, e.date ? dd(e.date) : '', e.what, e.cat || '', e.sum, e.paidBy, e.split ? 'ДА' : 'НЕТ']));
   capex.push([], ['Итого', '', '', '', cx.total], ...PARTNERS.map(p => ['Оплатил ' + p, '', '', '', r2(cx.paid[p])]), [cx.saldo.replace(/[👉✅]/g, '').trim()]);
-  const buys = [['Дата', 'Цветок', 'Пачек', 'Шт в пачке', 'Цена пачки', 'Всего шт', 'Сумма', 'За 1 шт', 'Для лида', 'Добавил']];
-  items.slice().reverse().forEach(i => buys.push([new Date(i.t).toLocaleDateString('ru-RU'), i.name, i.packs, i.per, i.price, i.packs * i.per, r2(cost(i)), r2(i.price / i.per), (leads.find(l => l.id === i.lead) || {}).name || '', i.by || '']));
+  const buys = [['Дата', 'Категория', 'Название', 'Упаковок', 'В упаковке', 'Цена упаковки', 'Всего', 'Ед.', 'Сумма', 'За единицу', 'Для лида', 'Фото', 'Добавил']];
+  items.slice().reverse().forEach(i => { const c = CATS[catOf(i)]; buys.push([new Date(i.t).toLocaleDateString('ru-RU'), c.n.replace(/^\S+ /, ''), i.name, i.packs, i.per, i.price, r2(i.packs * i.per), c.u, r2(cost(i)), r2(i.price / i.per), (leads.find(l => l.id === i.lead) || {}).name || '', i.photo ? 'есть' : '', i.by || '']); });
   const params = [['Параметр', 'Значение'], ['Доставка, zł', SETTINGS.delivery], ['Бесплатная доставка от, zł', SETTINGS.freeFrom], ['Флористка Саша, % от маржи', SETTINGS.florist],
     ...PARTNERS.map(p => ['Доля ' + p + ', %', (SETTINGS.shares || {})[p]]), [], ['Расходник на 1 букет', 'Себестоимость'], ...SETTINGS.pack, ['ИТОГО упаковка', PACK_COST]];
   const wb = XLSX.utils.book_new();
@@ -1176,6 +1301,22 @@ $('xlsBtn').onclick = async () => {
   try { XLSX.writeFile(wb, name); }
   catch (e) { $('xlsErr').textContent = 'Скачивание не поддерживается здесь — открой приложение на компьютере (Telegram Desktop или web.telegram.org)'; }
 };
+
+// ---------- Instagram: ответ клиенту через сервер (instagram-worker) ----------
+const IG_SERVER = ''; // адрес Cloudflare Worker, напр. https://lepestok-ig.<ник>.workers.dev — пусто = ответы выключены
+async function igReply(id) {
+  const l = leads.find(x => x.id === id), box = $('r_' + id), text = box.value.trim();
+  if (!text) return;
+  $('rb_' + id).disabled = true; $('re_' + id).textContent = '';
+  try {
+    const r = await fetch(IG_SERVER + '/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key: ghToken, igId: l.igId, text, by: me()})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'ошибка ' + r.status);
+    box.value = ''; ok(); lastWrite = 0; dataEtag = null; await poll();
+  } catch (e) { $('re_' + id).textContent = '⚠️ ' + e.message; }
+  $('rb_' + id).disabled = false;
+}
 
 // ---------- Instagram: открыть переписку с клиентом ----------
 function openIg(nick) {
@@ -1240,27 +1381,31 @@ function render() {
     .map(l => `<option value="${esc(l.contact)}">${esc(l.name)}</option>`).join('');
 
   // итого
-  let total = 0, qty = 0;
-  items.forEach(i => { total += cost(i); qty += i.packs * i.per; });
-  $('sTotal').textContent = zl(total); $('sQty').textContent = qty; $('sAvg').textContent = qty ? zl(total / qty) : '—';
-  $('names').innerHTML = [...new Set(items.map(i => i.name))].map(n => `<option value="${esc(n)}">`).join('');
+  let total = 0, fSum = 0, qty = 0; const byCat = {};
+  items.forEach(i => { const k = catOf(i), c = cost(i); total += c; byCat[k] = byCat[k] || {sum: 0, qty: 0}; byCat[k].sum += c; byCat[k].qty += i.packs * i.per;
+    if (k === 'flowers') { fSum += c; qty += i.packs * i.per; } });
+  $('sTotal').textContent = zl(total); $('sQty').textContent = qty; $('sAvg').textContent = qty ? zl(fSum / qty) : '—';
+  $('sCats').innerHTML = Object.entries(CATS).map(([k, c]) => byCat[k] ? `<div class="catrow"><span>${c.n}</span><span>${Math.round(byCat[k].qty * 100) / 100} ${c.u} · <b>${zl(byCat[k].sum)}</b> · ${zl(byCat[k].sum / byCat[k].qty)}/${c.u}</span></div>` : '').join('') || '<div class="meta">Закупок пока нет</div>';
+  $('names').innerHTML = [...new Set(items.filter(i => catOf(i) === fCat).map(i => i.name))].map(n => `<option value="${esc(n)}">`).join('');
 
   // история закупок
-  if (!items.length) $('list').innerHTML = '<div class="card empty">Пока пусто</div>';
+  const shown = items.filter(i => pFilter === 'all' || catOf(i) === pFilter);
+  if (!shown.length) $('list').innerHTML = '<div class="card empty">Пока пусто</div>';
   else {
     let html = '', day = '';
-    for (const i of items) {
+    for (const i of shown) {
       const d = new Date(i.t).toLocaleDateString('ru-RU', {day: 'numeric', month: 'long', year: 'numeric'});
       if (d !== day) { day = d; html += `<div class="day">${d}</div>`; }
       const ln = leadName(i.lead);
       html += `<div class="card item">
-        <div><div class="name">${esc(i.name)}</div>
-          <div class="meta">${i.packs} пач. × ${i.per} шт × ${zl(i.price)}</div>
-          <div class="meta">${i.packs * i.per} шт · ${zl(cost(i))}</div>
+        <div><div class="name">${catOf(i) !== 'flowers' ? CATS[catOf(i)].n.split(' ')[0] + ' ' : ''}${esc(i.name)}</div>
+          <div class="meta">${i.packs} × ${i.per} ${CATS[catOf(i)].u} × ${zl(i.price)}</div>
+          <div class="meta">${Math.round(i.packs * i.per * 100) / 100} ${CATS[catOf(i)].u} · ${zl(cost(i))}</div>
+          ${i.photo ? `<button class="photo-link" onclick="showPhoto('${esc(i.photo)}')">📷 фото</button>` : ''}
           ${ln ? `<span class="tag">👤 ${esc(ln)}</span><br>` : ''}
           ${i.by ? `<div class="by">${byLine(i)}</div>` : ''}
           <button class="del" onclick="editItemForm('${i.id}')" style="color:var(--accent);margin-right:14px">✏️ Изменить</button><button class="del" onclick="delItem('${i.id}')">Удалить</button></div>
-        <div class="right"><div class="per">${zl(i.price / i.per)}</div><div class="meta">за 1 шт</div></div>
+        <div class="right"><div class="per">${zl(i.price / i.per)}</div><div class="meta">за 1 ${CATS[catOf(i)].u}</div></div>
       </div>`;
     }
     $('list').innerHTML = html;
@@ -1284,6 +1429,9 @@ function render() {
   if (!$('repView').classList.contains('hidden')) renderReport();
   if (!$('calCard').classList.contains('hidden')) drawCal();
   if (!list.length) return $('leadList').innerHTML = `<div class="card empty">${leads.length ? 'Ничего не найдено' : 'Лидов пока нет'}</div>`;
+  const drafts = {}; // не терять недописанные ответы при синхронизации
+  document.querySelectorAll('.reply textarea').forEach(t => { if (t.value) drafts[t.id] = t.value; });
+  requestAnimationFrame(() => Object.entries(drafts).forEach(([id, v]) => { const t = $(id); if (t) t.value = v; }));
   $('leadList').innerHTML = list.map(l => {
     const its = items.filter(i => i.lead === l.id);
     const c = leadCalc(l), pack = c.pack, costAll = c.costAll, profit = c.margin;
@@ -1309,8 +1457,10 @@ function render() {
         </div>
       </div>
       ${open ? `<div class="sub" onclick="event.stopPropagation()">
-        ${(l.msgs || []).length ? `<div class="chat">${l.msgs.slice(-10).map(m => `<p><span>${when(m.t)}</span>${esc(m.text)}</p>`).join('')}</div>
-          ${l.ig ? `<button class="small" onclick="openIg('${esc(l.ig)}')">📸 Ответить в Instagram</button>` : ''}` : ''}
+        ${(l.msgs || []).length ? `<div class="chat">${l.msgs.slice(-15).map(m => `<p class="${m.me ? 'me' : ''}"><span>${when(m.t)}${m.me && m.by ? ' · ' + esc(m.by) : ''}</span>${esc(m.text)}</p>`).join('')}</div>` : ''}
+        ${l.igId && IG_SERVER ? `<div class="reply"><textarea id="r_${l.id}" rows="2" placeholder="Ответ клиенту в Instagram…"></textarea>
+          <button class="small" id="rb_${l.id}" onclick="igReply('${l.id}')">➤</button></div><div class="err" id="re_${l.id}"></div>`
+          : l.ig ? `<button class="small" onclick="openIg('${esc(l.ig)}')">📸 Открыть переписку в Instagram</button>` : ''}
         ${l.list ? `<div><span>По прайсу</span><span>${zl(l.list)}</span></div>` : ''}
         <div><span>Финальная цена</span><span><input class="mini" id="e_sale_${l.id}" type="number" inputmode="decimal" value="${l.sale || ''}" onchange="editLead('${l.id}','sale')"> zł</span></div>
         ${its.map(i => `<div><span>${esc(i.name)} — ${i.packs * i.per} шт</span><span>−${zl(cost(i))}</span></div>`).join('') || (l.flowers == null ? '<div class="meta">Закупок пока нет</div>' : '')}
