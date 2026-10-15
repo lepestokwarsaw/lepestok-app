@@ -101,6 +101,26 @@
   .pos{color:#2a9d4b}.neg{color:var(--danger)}
   button.small{width:auto;padding:8px 12px;font-size:14px;margin:8px 8px 0 0}
   .day{font-size:13px;color:var(--hint);margin:14px 4px 6px}
+
+  /* мобильная вёрстка форм: поля в парах на одной линии, ничего не вылезает */
+  .row, .row2{align-items:end}
+  .row > div, .row2 > div{min-width:0}
+  .row label, .row2 label:not(.check){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  input, select{min-width:0;max-width:100%;height:44px;box-sizing:border-box;margin:0}
+  input[type=checkbox]{height:20px}
+  input.mini, select.mini{height:34px}
+  .sizes input{height:38px}
+  input[type=date], input[type=time]{-webkit-appearance:none;appearance:none;display:block;text-align:left;line-height:normal}
+  input[type=date]::-webkit-date-and-time-value, input[type=time]::-webkit-date-and-time-value{text-align:left;margin:0}
+  .row2 .check{height:44px;margin:0;padding:0 4px;background:var(--bg2);border-radius:10px;border:1px solid rgba(128,128,128,.3)}
+  @media (max-width:400px){
+    .wrap{padding:12px}
+    .card{padding:12px}
+    .row{gap:6px}
+    .row label, .row2 label{font-size:12px}
+    .tabs a{font-size:12px;padding:8px 1px}
+    .sizes{grid-template-columns:repeat(3,1fr)}
+  }
 </style>
 </head>
 <body>
@@ -176,7 +196,7 @@
           <div><label>Время</label><input id="lTime" type="time"></div>
         </div>
         <div class="row2">
-          <div><label class="check" style="margin-top:28px"><input type="checkbox" id="lPaid"> Оплачено</label></div>
+          <div><label class="check"><input type="checkbox" id="lPaid"> Оплачено</label></div>
           <div><label>Способ оплаты</label><select id="lPay"><option value="">—</option><option>Наличные</option><option>Карта</option><option>BLIK</option><option>Перевод</option></select></div>
         </div>
         <div class="row2">
@@ -231,7 +251,7 @@
         <datalist id="expCats"><option value="Инструменты и склад"><option value="Оборудование (фото / свет)"><option value="Реклама Meta Ads"><option value="Расходники"><option value="Транспорт"></datalist>
         <div class="row2">
           <div><label>Кто оплатил</label><select id="ePaidBy"></select></div>
-          <div><label class="check" style="margin-top:28px"><input type="checkbox" id="eSplit" checked> Делить пополам</label></div>
+          <div><label class="check"><input type="checkbox" id="eSplit" checked> Делить пополам</label></div>
         </div>
         <div class="err" id="expErr"></div>
         <button id="expBtn">Добавить расход</button>
