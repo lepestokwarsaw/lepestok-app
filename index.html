@@ -90,6 +90,9 @@
   .seg{display:flex;background:var(--bg2);border-radius:10px;padding:3px;margin-top:12px}
   .seg a{flex:1;text-align:center;padding:9px 4px;border-radius:8px;cursor:pointer;color:var(--hint);font-weight:600;font-size:15px}
   .seg a.on{background:var(--accent);color:var(--accent-text)}
+  .chat{background:var(--bg2);border-radius:10px;padding:8px 10px;margin-bottom:8px;display:block!important;max-height:220px;overflow:auto}
+  .chat p{margin:0 0 6px;font-size:14px;white-space:pre-wrap}
+  .chat span{display:block;font-size:11px;color:var(--hint)}
   .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px;margin-top:14px;cursor:pointer}
   .check input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
   select{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
@@ -231,7 +234,7 @@
 
       <input id="lSearch" class="search" placeholder="🔍 Поиск: имя, телефон, букет…">
       <div class="chips" id="leadFilter">
-        <a data-f="all" class="on">Все</a><a data-f="today">Сегодня</a><a data-f="tomorrow">Завтра</a><a data-f="unpaid">Не оплачены</a><a data-f="cal">📅 Календарь</a>
+        <a data-f="all" class="on">Все</a><a data-f="today">Сегодня</a><a data-f="tomorrow">Завтра</a><a data-f="unpaid">Не оплачены</a><a data-f="ig">📸 Instagram</a><a data-f="cal">📅 Календарь</a>
       </div>
       <div class="card hidden" id="calCard">
         <div class="calhead"><a id="calPrev">‹</a><b id="calTitle"></b><a id="calNext">›</a></div>
@@ -794,7 +797,11 @@ function buyFor(id) {
 }
 
 let openLead = null, leadFilter = 'all';
-function toggleLead(id) { openLead = openLead === id ? null : id; render(); }
+function toggleLead(id) {
+  openLead = openLead === id ? null : id; render();
+  const l = leads.find(x => x.id === id);
+  if (openLead && l && l.unread) mutate(d => { const x = d.leads.find(x => x.id === id); if (x) delete x.unread; }, 'Прочитано: ' + l.name).catch(() => {});
+}
 $('leadFilter').onclick = e => {
   const f = e.target.dataset && e.target.dataset.f; if (!f) return;
   if (f === 'cal') { $('calCard').classList.toggle('hidden'); drawCal(); return; }
@@ -1067,8 +1074,8 @@ $('xlsBtn').onclick = async () => {
 // ---------- Instagram: открыть переписку с клиентом ----------
 function openIg(nick) {
   const url = 'https://ig.me/m/' + nick;
-  if (inTG) { tg.openLink(url); return false; }
-  return true;
+  if (inTG) tg.openLink(url); else window.open(url, '_blank');
+  return false;
 }
 
 // ---------- расходы: список ----------
@@ -1157,9 +1164,11 @@ function render() {
   const q = $('lSearch').value.trim().toLowerCase();
   const t0 = todayStr(), t1 = todayStr(1);
   let list = leads.filter(l =>
-    (calDay ? l.date === calDay : leadFilter === 'all' || (leadFilter === 'today' && l.date === t0) || (leadFilter === 'tomorrow' && l.date === t1) || (leadFilter === 'unpaid' && !l.paid)) &&
+    (calDay ? l.date === calDay : leadFilter === 'all' || (leadFilter === 'today' && l.date === t0) || (leadFilter === 'tomorrow' && l.date === t1) || (leadFilter === 'unpaid' && !l.paid) || (leadFilter === 'ig' && l.source === 'instagram')) &&
     (!q || [l.name, l.contact, l.note, l.bouquet].some(v => String(v || '').toLowerCase().includes(q))));
   if (calDay || leadFilter === 'today' || leadFilter === 'tomorrow') list = list.slice().sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  const unread = leads.filter(l => l.unread).length;
+  $('leadFilter').querySelector('[data-f="ig"]').textContent = '📸 Instagram' + (unread ? ` (${unread} новых)` : '');
   [['today', t0], ['tomorrow', t1]].forEach(([f, d]) => {
     const n = leads.filter(l => l.date === d).length;
     $('leadFilter').querySelector(`[data-f="${f}"]`).textContent = (f === 'today' ? 'Сегодня' : 'Завтра') + (n ? ` (${n})` : '');
@@ -1178,7 +1187,7 @@ function render() {
     const deliv = l.date ? `${pick ? '🏬 самовывоз' : '🚚 доставка'} ${l.date === t0 ? 'сегодня' : l.date === t1 ? 'завтра' : l.date.split('-').reverse().join('.')}${l.time ? ' ' + l.time : ''}` : '';
     return `<div class="card lead" onclick="toggleLead('${l.id}')">
       <div class="item">
-        <div><div class="name">${esc(l.name)}${n > 1 ? ` <span class="tag">⭐ ${n} заказ.</span>` : ''}</div>
+        <div><div class="name">${l.unread ? '<span class="tag unpaid">📸 новое</span> ' : l.source === 'instagram' ? '📸 ' : ''}${esc(l.name)}${n > 1 ? ` <span class="tag">⭐ ${n} заказ.</span>` : ''}</div>
           ${l.bouquet || l.qty ? `<div class="meta">💐 ${esc(l.bouquet || 'Свой букет')}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>` : ''}
           ${deliv ? `<div class="meta">${deliv}</div>` : ''}
           ${l.contact ? `<div class="meta">${esc(l.contact)}</div>` : ''}
@@ -1194,6 +1203,8 @@ function render() {
         </div>
       </div>
       ${open ? `<div class="sub" onclick="event.stopPropagation()">
+        ${(l.msgs || []).length ? `<div class="chat">${l.msgs.slice(-10).map(m => `<p><span>${when(m.t)}</span>${esc(m.text)}</p>`).join('')}</div>
+          ${l.ig ? `<button class="small" onclick="openIg('${esc(l.ig)}')">📸 Ответить в Instagram</button>` : ''}` : ''}
         ${l.list ? `<div><span>По прайсу</span><span>${zl(l.list)}</span></div>` : ''}
         <div><span>Финальная цена</span><span><input class="mini" id="e_sale_${l.id}" type="number" inputmode="decimal" value="${l.sale || ''}" onchange="editLead('${l.id}','sale')"> zł</span></div>
         ${its.map(i => `<div><span>${esc(i.name)} — ${i.packs * i.per} шт</span><span>−${zl(cost(i))}</span></div>`).join('') || (l.flowers == null ? '<div class="meta">Закупок пока нет</div>' : '')}
