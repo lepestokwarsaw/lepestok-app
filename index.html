@@ -95,6 +95,9 @@
   .chat{background:var(--bg2);border-radius:10px;padding:8px 10px;margin-bottom:8px;display:block!important;max-height:220px;overflow:auto}
   .chat p{margin:0 0 6px;font-size:14px;white-space:pre-wrap}
   .chat span{display:block;font-size:11px;color:var(--hint)}
+  .item > div:first-child{min-width:0;flex:1}
+  .name, .meta, .by, .chat p, .client{overflow-wrap:anywhere;word-break:break-word}
+  .item .right{flex-shrink:0;max-width:45%}
   .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px;margin-top:14px;cursor:pointer}
   .check input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
   select{width:100%;padding:11px 12px;border:1px solid rgba(128,128,128,.3);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
@@ -797,6 +800,12 @@ let editId = null;
 const todayStr = (add = 0) => { const d = new Date(); d.setDate(d.getDate() + add); return d.toLocaleDateString('sv-SE'); };
 
 function readForm() {
+  const f = readFormRaw();
+  for (const k of ['name', 'contact']) if (isIgUrl(f[k])) { if (!f.ig) f.ig = igNick(f[k]); f[k] = k === 'name' ? '@' + igNick(f[k]) : ''; }
+  if (isIgUrl(f.note) && !f.ig) f.ig = igNick(f.note.match(/\S*instagram\.com\/\S+/i)[0]);
+  return f;
+}
+function readFormRaw() {
   const i = $('lItem').value, q = num($('lQty').value);
   return {name: $('lName').value.trim(), contact: $('lContact').value.trim(), note: $('lNote').value.trim(),
           bouquet: i === '' ? '' : itemName(i), item: i === '' ? null : Number(i), qty: q, list: priceFor(i, q).price,
@@ -954,7 +963,9 @@ let SETTINGS = DEFAULT_SETTINGS, expenses = [];
 const packTotal = s => Math.round((s.pack || []).reduce((a, p) => a + (+p[1] || 0), 0) * 100) / 100;
 PACK_COST = packTotal(SETTINGS);
 const COURIERS = ['Самовывоз', ...PARTNERS, 'Курьер / такси'];
-const igNick = s => String(s || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, '');
+const igNick = s => String(s || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.|m\.)?instagram\.com\//i, '').replace(/[/?#].*$/, '');
+const isIgUrl = s => /instagram\.com\//i.test(String(s || ''));
+const showName = l => isIgUrl(l.name) ? '@' + igNick(l.name) : (l.name || '');
 
 // всё по одному заказу
 function leadCalc(l) {
@@ -1102,7 +1113,7 @@ function renderReport() {
     `<div class="client" style="margin-top:8px">${cx.saldo}</div>`;
 
   $('repOrders').innerHTML = ls.length ? ls.map((l, k) => { const c = cs[k]; return `<div class="card item">
-    <div><div class="name">${esc(l.name)}</div><div class="meta">${leadDay(l).split('-').reverse().join('.')} · ${esc(l.bouquet || 'букет')}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>
+    <div><div class="name">${esc(showName(l))}</div><div class="meta">${leadDay(l).split('-').reverse().join('.')} · ${esc(l.bouquet || 'букет')}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>
       <div class="meta">себест. ${zl(c.costAll)} (цветы ${zl(c.flowers)} + упак. ${zl(c.pack)})${l.paidBy ? ' · цветы: ' + esc(l.paidBy) : ''}</div></div>
     <div class="right"><div class="meta">${zl(c.sale)}</div><div class="per ${c.margin >= 0 ? 'pos' : 'neg'}">${c.margin >= 0 ? '+' : ''}${zl(c.margin)}</div><div class="meta">${Math.round(c.pct * 100)}%</div></div>
   </div>`; }).join('') : '<div class="card empty">Заказов с ценой за период нет</div>';
@@ -1221,7 +1232,7 @@ function render() {
   // выбор лида в форме закупки
   const cur = $('fLead').value;
   $('fLead').innerHTML = '<option value="">— без лида (на склад) —</option>' +
-    leads.map(l => `<option value="${l.id}">${esc(l.name)}${l.date ? ' · ' + l.date.slice(5).split('-').reverse().join('.') : ''}${l.bouquet ? ' · ' + esc(l.bouquet) : ''}</option>`).join('');
+    leads.map(l => `<option value="${l.id}">${esc(showName(l))}${l.date ? ' · ' + l.date.slice(5).split('-').reverse().join('.') : ''}${l.bouquet ? ' · ' + esc(l.bouquet) : ''}</option>`).join('');
   $('fLead').value = leads.some(l => l.id === cur) ? cur : '';
 
   // подсказки контактов
@@ -1282,7 +1293,7 @@ function render() {
     const deliv = l.date ? `${pick ? '🏬 самовывоз' : '🚚 доставка'} ${l.date === t0 ? 'сегодня' : l.date === t1 ? 'завтра' : l.date.split('-').reverse().join('.')}${l.time ? ' ' + l.time : ''}` : '';
     return `<div class="card lead" onclick="toggleLead('${l.id}')">
       <div class="item">
-        <div><div class="name">${l.unread ? '<span class="tag unpaid">📸 новое</span> ' : l.source === 'instagram' ? '📸 ' : ''}${esc(l.name)}${n > 1 ? ` <span class="tag">⭐ ${n} заказ.</span>` : ''}</div>
+        <div><div class="name">${l.unread ? '<span class="tag unpaid">📸 новое</span> ' : l.source === 'instagram' ? '📸 ' : ''}${esc(showName(l))}${n > 1 ? ` <span class="tag">⭐ ${n} заказ.</span>` : ''}</div>
           ${l.bouquet || l.qty ? `<div class="meta">💐 ${esc(l.bouquet || 'Свой букет')}${l.qty ? ' · ' + l.qty + ' шт' : ''}</div>` : ''}
           ${deliv ? `<div class="meta">${deliv}</div>` : ''}
           ${l.contact ? `<div class="meta">${esc(l.contact)}</div>` : ''}
