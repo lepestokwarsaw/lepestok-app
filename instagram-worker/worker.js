@@ -94,6 +94,10 @@ async function igWebhook(req, url, env) {
 
   const body = JSON.parse(raw), events = [];
   for (const entry of body.entry || []) {
+    // журнал (Cloudflare → Observability): что именно прислала Meta, без текста сообщений
+    console.log('ig event', JSON.stringify({changes: (entry.changes || []).map(c => c.field),
+      messaging: (entry.messaging || []).map(ev => ({from: ev.sender && ev.sender.id, to: ev.recipient && ev.recipient.id,
+        kind: ev.message ? (ev.message.is_echo ? 'echo' : ev.message.is_deleted ? 'deleted' : 'message') : Object.keys(ev).filter(k => !['sender', 'recipient', 'timestamp'].includes(k)).join(',')}))}));
     for (const ev of entry.messaging || []) {
       const m = ev.message;
       if (!m || m.is_deleted) continue;
@@ -151,19 +155,20 @@ async function mutateData(env, fn, msg) {
   throw new Error('GitHub: конфликт сохранения');
 }
 
-const recentLead = (data, igId) => data.leads.filter(l => l.igId === igId && Date.now() - (l.lastMsg || l.t) < LEAD_WINDOW_MS).sort((a, b) => b.t - a.t)[0];
+// удалённые в приложении лиды остаются в базе с deleted:true — их не трогаем
+const recentLead = (data, igId) => data.leads.filter(l => !l.deleted && l.igId === igId && Date.now() - (l.lastMsg || l.t) < LEAD_WINDOW_MS).sort((a, b) => b.t - a.t)[0];
 
 // сохранить сообщения (входящие и наши) в лиды; уведомить о входящих
 async function saveMessages(events, env, notify) {
   const profiles = {};
-  for (const e of events) if (!e.me && !profiles[e.igId]) profiles[e.igId] = await igProfile(e.igId, env);
+  for (const e of events) if (!profiles[e.igId]) profiles[e.igId] = await igProfile(e.igId, env);
 
   const notes = await mutateData(env, data => {
     const notes = [];
     for (const e of events) {
       const p = profiles[e.igId] || {};
       let lead = recentLead(data, e.igId);
-      if (!lead && e.me) continue; // наш ответ клиенту, которого нет в базе — пропускаем
+      // магазин сам написал клиенту, которого нет в базе (например, лид удалили) — тоже заводим лид
       const isNew = !lead;
       if (isNew) {
         lead = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), t: e.t, by: 'Instagram', source: 'instagram',
@@ -175,6 +180,7 @@ async function saveMessages(events, env, notify) {
       if (e.me && msgs.some(m => m.me && m.text === e.text && Math.abs(m.t - e.t) < 120000)) continue; // уже записано при отправке
       lead.msgs = msgs.concat(e.me ? {t: e.t, text: e.text, me: true, by: e.by} : {t: e.t, text: e.text}).slice(-50);
       lead.lastMsg = e.t;
+      if (e.me && p.username && !lead.ig) lead.ig = p.username;
       if (!e.me) {
         lead.unread = true;
         if (p.username && !lead.ig) lead.ig = p.username;
@@ -234,7 +240,7 @@ async function igSend(env, igId, text, imageUrl) {
 }
 async function recordSent(env, igId, text, by) {
   await mutateData(env, data => {
-    const lead = recentLead(data, igId) || data.leads.filter(l => l.igId === igId).sort((a, b) => b.t - a.t)[0];
+    const lead = recentLead(data, igId) || data.leads.filter(l => !l.deleted && l.igId === igId).sort((a, b) => b.t - a.t)[0];
     if (!lead) return;
     lead.msgs = (lead.msgs || []).concat({t: Date.now(), text, me: true, by}).slice(-50);
     lead.lastMsg = Date.now(); delete lead.unread;
