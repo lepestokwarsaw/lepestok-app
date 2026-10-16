@@ -3,7 +3,9 @@
  * Cloudflare Worker:
  *   /ig    — вебхук Instagram: новые сообщения в Direct → лид в общей базе data.json + уведомление в Telegram
  *   /send  — ответ клиенту из мини-приложения (авторизация тем же ключом доступа к базе)
- *   /tg    — вебхук бота: ответ (reply) на уведомление в Telegram уходит клиенту в Instagram
+ *   /tg    — вебхук бота: ответ (reply) на уведомление в Telegram уходит клиенту в Instagram (текст или фото)
+ *   /media — отдаёт фото для Instagram по подписанной ссылке (фото из бота или из приложения)
+ *   /subscribe, /unsubscribe — вход/выход в мини-приложении: кто вошёл, тому бот шлёт уведомления и от того принимает ответы
  *
  * Секреты (Settings → Variables and Secrets, тип Secret) — вводятся вручную, в коде их нет:
  *   VERIFY_TOKEN   — любая строка, та же вписывается в Meta при настройке вебхука
@@ -11,7 +13,7 @@
  *   IG_TOKEN       — Instagram access token (чтение профиля и отправка сообщений)
  *   GH_TOKEN       — тот же GitHub-ключ доступа к lepestok-data, что в приложении
  *   TG_BOT_TOKEN   — токен @LepestokWarsawBot
- *   TG_CHAT_ID     — куда слать уведомления и откуда принимать ответы: твой id или id группы
+ *   TG_CHAT_ID     — владелец: получает уведомления всегда (плюс все, кто вошёл в приложение — список в KV 'subs')
  *   TG_SECRET      — любая строка, защищает /tg (передаётся Telegram при setWebhook)
  *
  * KV (binding IG_KV): ключ 'ig_token' = {token, expires_at, refreshed_at} — продлённый токен.
@@ -34,6 +36,8 @@ export default {
       if (url.pathname === '/ig') return await igWebhook(req, url, env);
       if (url.pathname === '/send') return await sendFromApp(req, env);
       if (url.pathname === '/tg') return await tgWebhook(req, env);
+      if (url.pathname === '/media') return await serveMedia(url, env);
+      if (url.pathname === '/subscribe' || url.pathname === '/unsubscribe') return await subscription(req, env, url.pathname === '/subscribe');
       // однократная привязка бота: /setup?key=TG_SECRET — сервер сам вызывает setWebhook своим токеном
       if (url.pathname === '/setup') {
         if (!env.TG_SECRET || url.searchParams.get('key') !== env.TG_SECRET) return new Response('forbidden', {status: 403});
@@ -180,15 +184,45 @@ async function saveMessages(events, env, notify) {
     return notes;
   }, 'Instagram: ' + events.length + ' сообщ.');
 
-  if (notify && env.TG_BOT_TOKEN && env.TG_CHAT_ID)
-    for (const text of notes) await tg(env, 'sendMessage', {chat_id: env.TG_CHAT_ID, text});
+  if (notify && env.TG_BOT_TOKEN) {
+    const to = await recipients(env);
+    for (const text of notes) for (const chat_id of to) await tg(env, 'sendMessage', {chat_id, text}).catch(() => {});
+  }
+}
+
+// ---------------- фото для Instagram ----------------
+// Instagram забирает картинку по публичной ссылке. Даём ссылку на этот же сервер с HMAC-подписью (TG_SECRET),
+// без неё /media ничего не отдаёт. Источник: файл Telegram (tg:<file_id>) или фото из приложения в KV (kv:<id>, живёт 2 дня).
+async function hmacHex(key, text) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  return [...new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(text)))].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function mediaUrl(origin, env, src) {
+  return `${origin}/media?src=${encodeURIComponent(src)}&s=${(await hmacHex(env.TG_SECRET, src)).slice(0, 32)}`;
+}
+async function serveMedia(url, env) {
+  const src = url.searchParams.get('src') || '';
+  if (!env.TG_SECRET || url.searchParams.get('s') !== (await hmacHex(env.TG_SECRET, src)).slice(0, 32)) return new Response('forbidden', {status: 403});
+  if (src.startsWith('tg:')) {
+    const f = await (await tg(env, 'getFile', {file_id: src.slice(3)})).json();
+    if (!f.ok) return new Response('not found', {status: 404});
+    const r = await fetch(`https://api.telegram.org/file/bot${env.TG_BOT_TOKEN}/${f.result.file_path}`);
+    return new Response(r.body, {status: r.status, headers: {'Content-Type': r.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'private, max-age=3600'}});
+  }
+  if (src.startsWith('kv:') && env.IG_KV) {
+    const buf = await env.IG_KV.get('img:' + src.slice(3), 'arrayBuffer');
+    if (!buf) return new Response('not found', {status: 404});
+    return new Response(buf, {headers: {'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=3600'}});
+  }
+  return new Response('not found', {status: 404});
 }
 
 // ---------------- отправка в Instagram ----------------
-async function igSend(env, igId, text) {
+async function igSend(env, igId, text, imageUrl) {
+  const message = imageUrl ? {attachment: {type: 'image', payload: {url: imageUrl}}} : {text};
   const r = await fetch(`${GRAPH}/me/messages`, {method: 'POST',
     headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + (await getToken(env))},
-    body: JSON.stringify({recipient: {id: igId}, message: {text}})});
+    body: JSON.stringify({recipient: {id: igId}, message})});
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
     const e = j.error || {};
@@ -211,15 +245,57 @@ async function recordSent(env, igId, text, by) {
 async function sendFromApp(req, env) {
   if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
   if (req.method !== 'POST') return json({error: 'method'}, 405, cors);
-  const {key, igId, text, by} = await req.json();
-  if (!key || !igId || !String(text || '').trim()) return json({error: 'Пустое сообщение'}, 400, cors);
+  const {key, igId, text, by, image} = await req.json();
+  const t = String(text || '').trim();
+  if (!key || !igId || (!t && !image)) return json({error: 'Пустое сообщение'}, 400, cors);
   const auth = await fetch(`https://api.github.com/repos/${DATA_REPO}`, {headers: gh(key)});
   if (!auth.ok) return json({error: 'Нет доступа'}, 403, cors);
   try {
-    await igSend(env, igId, text.trim());
-    await recordSent(env, igId, text.trim(), by || 'приложение');
+    if (image) {
+      if (!env.IG_KV) throw new Error('на сервере нет хранилища для фото (IG_KV)');
+      const bin = Uint8Array.from(atob(String(image).replace(/^data:[^,]*,/, '')), c => c.charCodeAt(0));
+      if (bin.length > 8 * 1024 * 1024) throw new Error('фото слишком большое');
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      await env.IG_KV.put('img:' + id, bin, {expirationTtl: 2 * 24 * 3600});
+      await igSend(env, igId, '', await mediaUrl(new URL(req.url).origin, env, 'kv:' + id));
+      await recordSent(env, igId, '📷 фото', by || 'приложение');
+    }
+    if (t) { await igSend(env, igId, t); await recordSent(env, igId, t, by || 'приложение'); }
     return json({ok: true}, 200, cors);
   } catch (e) { return json({error: e.message}, 400, cors); }
+}
+
+// ---------------- подписчики уведомлений ----------------
+// Кто вошёл в мини-приложение (есть ключ доступа к базе + проверенные данные Telegram), тот в списке 'subs'.
+async function recipients(env) {
+  const subs = env.IG_KV ? (await env.IG_KV.get('subs', 'json')) || [] : [];
+  return [...new Set([env.TG_CHAT_ID, ...subs.map(s => s.id)].filter(Boolean).map(String))];
+}
+// проверка initData мини-приложения (подпись Telegram ключом бота)
+async function tgUser(initData, env) {
+  const p = new URLSearchParams(initData || ''), hash = p.get('hash');
+  if (!hash) return null;
+  p.delete('hash');
+  const check = [...p.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('\n');
+  const k1 = await crypto.subtle.importKey('raw', new TextEncoder().encode('WebAppData'), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  const secret = await crypto.subtle.sign('HMAC', k1, new TextEncoder().encode(env.TG_BOT_TOKEN));
+  const k2 = await crypto.subtle.importKey('raw', secret, {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  const sig = [...new Uint8Array(await crypto.subtle.sign('HMAC', k2, new TextEncoder().encode(check)))].map(b => b.toString(16).padStart(2, '0')).join('');
+  if (sig !== hash) return null;
+  try { return JSON.parse(p.get('user')); } catch { return null; }
+}
+async function subscription(req, env, on) {
+  if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
+  const {key, initData} = await req.json();
+  const auth = await fetch(`https://api.github.com/repos/${DATA_REPO}`, {headers: gh(key || '')});
+  if (!auth.ok) return json({error: 'Нет доступа'}, 403, cors);
+  const u = await tgUser(initData, env);
+  if (!u || !u.id) return json({error: 'Открой приложение через бота'}, 400, cors);
+  if (!env.IG_KV) return json({error: 'нет хранилища IG_KV'}, 500, cors);
+  const subs = ((await env.IG_KV.get('subs', 'json')) || []).filter(s => String(s.id) !== String(u.id));
+  if (on) subs.push({id: String(u.id), name: u.username ? '@' + u.username : [u.first_name, u.last_name].filter(Boolean).join(' '), t: Date.now()});
+  await env.IG_KV.put('subs', JSON.stringify(subs));
+  return json({ok: true, subscribed: on, count: subs.length}, 200, cors);
 }
 
 // ---------------- Telegram-бот ----------------
@@ -230,19 +306,31 @@ async function tgWebhook(req, env) {
   if (req.method !== 'POST' || req.headers.get('x-telegram-bot-api-secret-token') !== env.TG_SECRET)
     return new Response('forbidden', {status: 403});
   const upd = await req.json(), m = upd.message;
-  if (!m || String(m.chat.id) !== String(env.TG_CHAT_ID)) return new Response('ok');
+  if (!m) return new Response('ok');
+  if (!(await recipients(env)).includes(String(m.chat.id))) {
+    if (m.text && m.text.startsWith('/start'))
+      await tg(env, 'sendMessage', {chat_id: m.chat.id, text: '🌸 Lepestok: нажми кнопку «Открыть» и войди в приложение — после входа сюда будут приходить сообщения клиентов из Instagram, и на них можно отвечать.'});
+    return new Response('ok');
+  }
   const orig = m.reply_to_message && (m.reply_to_message.text || '');
   const found = orig && orig.match(/🆔 ig:(\d+)/);
   if (!found) {
-    if (m.text && !m.text.startsWith('/'))
+    if ((m.text && !m.text.startsWith('/')) || m.photo)
       await tg(env, 'sendMessage', {chat_id: m.chat.id, reply_to_message_id: m.message_id,
         text: 'Чтобы ответить клиенту, нажми «Ответить» (reply) на уведомление о его сообщении.'});
     return new Response('ok');
   }
   const by = m.from && m.from.username ? '@' + m.from.username : (m.from && m.from.first_name) || 'Telegram';
+  const photo = m.photo && m.photo.length ? m.photo[m.photo.length - 1].file_id
+    : m.document && /^image\//.test(m.document.mime_type || '') ? m.document.file_id : null;
+  const text = (m.text || m.caption || '').trim();
   try {
-    await igSend(env, found[1], m.text || '');
-    await recordSent(env, found[1], m.text || '', by);
+    if (!photo && !text) throw new Error('можно отправить текст или фото');
+    if (photo) {
+      await igSend(env, found[1], '', await mediaUrl(new URL(req.url).origin, env, 'tg:' + photo));
+      await recordSent(env, found[1], '📷 фото', by);
+    }
+    if (text) { await igSend(env, found[1], text); await recordSent(env, found[1], text, by); }
     await tg(env, 'setMessageReaction', {chat_id: m.chat.id, message_id: m.message_id, reaction: [{type: 'emoji', emoji: '👍'}]});
   } catch (e) {
     await tg(env, 'sendMessage', {chat_id: m.chat.id, reply_to_message_id: m.message_id, text: '⚠️ Не отправлено: ' + e.message});
