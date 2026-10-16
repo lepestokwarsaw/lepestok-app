@@ -102,7 +102,7 @@
   .chat p:not(.me){background:var(--bg);border-radius:10px;padding:4px 8px;margin-right:24px}
   .reply{display:flex;gap:6px;align-items:flex-end;padding:0!important}
   .reply textarea{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:9px 10px;font:inherit;font-size:15px;background:var(--bg2);color:var(--text);resize:vertical}
-  .reply button.small{margin:0;height:42px;width:46px;font-size:18px}
+  .reply button.small, .reply .photo-send{margin:0;height:42px;width:46px;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:12px;border:1px solid var(--line);background:var(--bg2)}
   .photo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .photo-btn{display:inline-block;margin:0;padding:10px 14px;border-radius:12px;border:1px dashed var(--accent);color:var(--accent)!important;font-weight:600;cursor:pointer;font-size:14px}
   #fPhotoPrev{width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
@@ -579,7 +579,7 @@ $('unlockBtn').onclick = async () => {
   showLock();
 };
 
-$('logoutBtn').onclick = async () => { sessionStorage.removeItem('ok'); await store.del('remember'); location.reload(); };
+$('logoutBtn').onclick = async () => { await igSubscribe(false); sessionStorage.removeItem('ok'); await store.del('remember'); location.reload(); };
 
 // ---------- данные: закупки (p_) и лиды (l_) ----------
 let items = [], leads = [];
@@ -671,6 +671,7 @@ async function load() {
     setSync('⚠️ нет связи с базой', true);
   }
   clearInterval(pollTimer); pollTimer = setInterval(poll, POLL_MS);
+  igSubscribe(true);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 
@@ -1318,18 +1319,35 @@ $('xlsBtn').onclick = async () => {
 
 // ---------- Instagram: ответ клиенту через сервер (instagram-worker) ----------
 const IG_SERVER = 'https://lepestok-ig.flowersshop02.workers.dev'; // Cloudflare Worker (instagram-worker/worker.js)
-async function igReply(id) {
-  const l = leads.find(x => x.id === id), box = $('r_' + id), text = box.value.trim();
-  if (!text) return;
-  $('rb_' + id).disabled = true; $('re_' + id).textContent = '';
+async function igReply(id, image) {
+  const l = leads.find(x => x.id === id), box = $('r_' + id), text = image ? '' : box.value.trim();
+  if (!text && !image) return;
+  $('rb_' + id).disabled = true; $('re_' + id).textContent = image ? 'Отправляю фото…' : '';
   try {
     const r = await fetch(IG_SERVER + '/send', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({key: ghToken, igId: l.igId, text, by: me()})});
+      body: JSON.stringify({key: ghToken, igId: l.igId, text, image, by: me()})});
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'ошибка ' + r.status);
-    box.value = ''; ok(); lastWrite = 0; dataEtag = null; await poll();
+    if (!image) box.value = '';
+    $('re_' + id).textContent = ''; ok(); lastWrite = 0; dataEtag = null; await poll();
   } catch (e) { $('re_' + id).textContent = '⚠️ ' + e.message; }
   $('rb_' + id).disabled = false;
+}
+// фото клиенту: сжимаем до 1280px и отправляем через сервер
+async function igPhoto(id, input) {
+  const f = input.files[0]; input.value = ''; if (!f) return;
+  try {
+    const blob = await compressImage(f, 1280, 0.8);
+    const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+    await igReply(id, b64);
+  } catch (e) { $('re_' + id).textContent = '⚠️ ' + e.message; }
+}
+
+// ---------- уведомления в бота: кто вошёл в приложение, тому приходят сообщения из Instagram ----------
+function igSubscribe(on) {
+  if (!IG_SERVER || !inTG || !ghToken) return Promise.resolve();
+  return fetch(IG_SERVER + (on ? '/subscribe' : '/unsubscribe'), {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: ghToken, initData: tg.initData})}).catch(() => {});
 }
 
 // ---------- Instagram: открыть переписку с клиентом ----------
@@ -1473,6 +1491,7 @@ function render() {
       ${open ? `<div class="sub" onclick="event.stopPropagation()">
         ${(l.msgs || []).length ? `<div class="chat">${l.msgs.slice(-15).map(m => `<p class="${m.me ? 'me' : ''}"><span>${when(m.t)}${m.me && m.by ? ' · ' + esc(m.by) : ''}</span>${esc(m.text)}</p>`).join('')}</div>` : ''}
         ${l.igId && IG_SERVER ? `<div class="reply"><textarea id="r_${l.id}" rows="2" placeholder="Ответ клиенту в Instagram…"></textarea>
+          <label class="small photo-send" title="Отправить фото">📷<input type="file" accept="image/*" hidden onchange="igPhoto('${l.id}', this)"></label>
           <button class="small" id="rb_${l.id}" onclick="igReply('${l.id}')">➤</button></div><div class="err" id="re_${l.id}"></div>`
           : l.ig ? `<button class="small" onclick="openIg('${esc(l.ig)}')">📸 Открыть переписку в Instagram</button>` : ''}
         ${l.list ? `<div><span>По прайсу</span><span>${zl(l.list)}</span></div>` : ''}
