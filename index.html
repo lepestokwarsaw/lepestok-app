@@ -622,12 +622,13 @@ async function ghGet(useEtag) {
 }
 
 function applyData(d) {
-  items = (d.items || []).slice().sort((a, b) => b.t - a.t);
-  leads = (d.leads || []).slice().sort((a, b) => b.t - a.t);
+  // удалённые записи остаются в базе (для Excel, подсвечиваются красным), в приложении их не видно
+  items = (d.items || []).filter(x => !x.deleted).sort((a, b) => b.t - a.t);
+  leads = (d.leads || []).filter(x => !x.deleted).sort((a, b) => b.t - a.t);
   PRICES = d.prices && d.prices.length ? d.prices : DEFAULT_PRICES;
   SETTINGS = Object.assign({}, DEFAULT_SETTINGS, d.settings || {});
   PACK_COST = packTotal(SETTINGS);
-  expenses = (d.expenses || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.t - a.t);
+  expenses = (d.expenses || []).filter(x => !x.deleted).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.t - a.t);
   render();
 }
 function setSync(text, bad) { $('sync').textContent = text; $('sync').classList.toggle('neg', !!bad); }
@@ -841,7 +842,7 @@ $('addBtn').onclick = async () => {
 
 async function delItem(id) {
   if (!await askDel('Удалить закупку?')) return;
-  await mutate(d => { d.items = d.items.filter(i => i.id !== id); }, 'Удалена закупка').catch(() => setSync('⚠️ не сохранено', true));
+  await mutate(d => { markDeleted(d.items, id); }, 'Удалена закупка').catch(() => setSync('⚠️ не сохранено', true));
 }
 
 // ---------- прайс-лист: цена букета за N штук (0 = нет такого размера). Хранится в общей базе ----------
@@ -1003,12 +1004,17 @@ async function togglePaid(id) {
   await setLead(id, {paid: !l.paid, pay}, (l.paid ? 'Снята оплата: ' : 'Оплачено: ') + l.name);
 }
 
+// «удаление» = пометка: запись остаётся в базе и в Excel (красным), кто и когда удалил
+function markDeleted(list, id) {
+  const x = list.find(x => x.id === id);
+  if (x) Object.assign(x, {deleted: true, deletedBy: me(), deletedAt: Date.now()});
+}
+
 async function delLead(id) {
-  if (!await askDel('Удалить лида? Закупки останутся, но без привязки.')) return;
+  if (!await askDel('Удалить лида? Закупки останутся.')) return;
   if (editId === id) resetForm();
   await mutate(d => {
-    d.leads = d.leads.filter(l => l.id !== id);
-    d.items.forEach(i => { if (i.lead === id) i.lead = ''; });
+    markDeleted(d.leads, id);
   }, 'Удалён лид').catch(() => setSync('⚠️ не сохранено', true));
 }
 
@@ -1169,7 +1175,7 @@ $('expBtn').onclick = async () => {
 };
 async function delExp(id) {
   if (!await askDel('Удалить расход?')) return;
-  await mutate(d => { d.expenses = (d.expenses || []).filter(e => e.id !== id); }, 'Удалён расход').catch(() => setSync('⚠️ не сохранено', true));
+  await mutate(d => { markDeleted(d.expenses || [], id); }, 'Удалён расход').catch(() => setSync('⚠️ не сохранено', true));
 }
 // кто сколько вложил и кто кому должен (как лист CAPEX_и_Вложения)
 function capexCalc() {
