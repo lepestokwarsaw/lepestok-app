@@ -436,7 +436,7 @@
       <datalist id="names"></datalist>
       <div class="row">
         <div><label id="fPacksLbl">Пачек</label><input id="fPacks" type="number" inputmode="decimal" value="1" min="0"></div>
-        <div><label id="fPerLbl">Шт в пачке</label><input id="fPer" type="number" inputmode="decimal" placeholder="25"></div>
+        <div><label id="fPerLbl">Шт в пачке</label><input id="fPer" type="number" inputmode="decimal" step="any" placeholder="25"></div>
         <div><label id="fPriceLbl">Цена пачки, zł</label><input id="fPrice" type="number" inputmode="decimal" placeholder="50"></div>
       </div>
       <div class="calc">
@@ -731,6 +731,9 @@ function setCat(k) {
   $('fNameLbl').textContent = c.name; $('fName').placeholder = c.ph;
   $('fPacksLbl').textContent = c.pk; $('fPerLbl').textContent = c.per; $('fPriceLbl').textContent = c.pr;
   $('cStemLbl').textContent = 'за 1 ' + c.u; $('cQtyLbl').textContent = 'всего, ' + c.u;
+  // стандартная упаковка: бумага — 20 листов, лента — рулон 25 ярдов = 22,86 м
+  const DEF_PER = {paper: 20, ribbon: 22.86};
+  if (!$('fPer').value || Object.values(DEF_PER).includes(num($('fPer').value))) { $('fPer').value = DEF_PER[k] || ''; calc(); }
   render && items && $('names') && ($('names').innerHTML = [...new Set(items.filter(i => catOf(i) === k).map(i => i.name))].map(n => `<option value="${esc(n)}">`).join(''));
 }
 $('fCat').onclick = e => { const k = e.target.dataset && e.target.dataset.c; if (k) setCat(k); };
@@ -807,7 +810,7 @@ let itemEditId = null;
 function resetItemForm() {
   itemEditId = null; $('fName').value = ''; $('fPer').value = ''; $('fPrice').value = ''; $('fPacks').value = '1'; clearPhoto();
   $('addBtn').textContent = 'Добавить закупку'; $('addCancel').classList.add('hidden'); $('addErr').textContent = '';
-  calc();
+  setCat(fCat);
 }
 function editItemForm(id) {
   const i = items.find(x => x.id === id); if (!i) return;
