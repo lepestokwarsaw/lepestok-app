@@ -723,6 +723,7 @@ const CATS = {
   other:   {n: '📦 Другое', name: 'Что куплено', ph: 'Пенка, Chrysal…', pk: 'Упаковок', per: 'Шт в упак.', pr: 'Цена упак., zł', u: 'шт'},
 };
 const catOf = i => CATS[i.cat] ? i.cat : 'flowers';
+const uOf = i => i.unit || (catOf(i) === 'paper' && /рулон/i.test(i.name || '') ? 'м' : CATS[catOf(i)].u);
 let fCat = 'flowers', pFilter = 'all';
 $('fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<a data-c="${k}">${c.n}</a>`).join('');
 function setCat(k) {
@@ -1319,7 +1320,7 @@ $('xlsBtn').onclick = async () => {
   expenses.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach((e, k) => capex.push([k + 1, e.date ? dd(e.date) : '', e.what, e.cat || '', e.sum, e.paidBy, e.split ? 'ДА' : 'НЕТ']));
   capex.push([], ['Итого', '', '', '', cx.total], ...PARTNERS.map(p => ['Оплатил ' + p, '', '', '', r2(cx.paid[p])]), [cx.saldo.replace(/[👉✅]/g, '').trim()]);
   const buys = [['Дата', 'Категория', 'Название', 'Упаковок', 'В упаковке', 'Цена упаковки', 'Всего', 'Ед.', 'Сумма', 'За единицу', 'Для лида', 'Фото', 'Добавил']];
-  items.slice().reverse().forEach(i => { const c = CATS[catOf(i)]; buys.push([new Date(i.t).toLocaleDateString('ru-RU'), c.n.replace(/^\S+ /, ''), i.name, i.packs, i.per, i.price, r2(i.packs * i.per), c.u, r2(cost(i)), r2(i.price / i.per), (leads.find(l => l.id === i.lead) || {}).name || '', i.photo ? 'есть' : '', i.by || '']); });
+  items.slice().reverse().forEach(i => { const c = CATS[catOf(i)]; buys.push([new Date(i.t).toLocaleDateString('ru-RU'), c.n.replace(/^\S+ /, ''), i.name, i.packs, i.per, i.price, r2(i.packs * i.per), uOf(i), r2(cost(i)), r2(i.price / i.per), (leads.find(l => l.id === i.lead) || {}).name || '', i.photo ? 'есть' : '', i.by || '']); });
   const params = [['Параметр', 'Значение'], ['Доставка, zł', SETTINGS.delivery], ['Бесплатная доставка от, zł', SETTINGS.freeFrom], ['Флористка Саша, % от маржи', SETTINGS.florist],
     ...PARTNERS.map(p => ['Доля ' + p + ', %', (SETTINGS.shares || {})[p]]), [], ['Расходник на 1 букет', 'Себестоимость'], ...SETTINGS.pack, ['ИТОГО упаковка', PACK_COST]];
   const wb = XLSX.utils.book_new();
@@ -1444,13 +1445,13 @@ function render() {
       const ln = leadName(i.lead);
       html += `<div class="card item">
         <div><div class="name">${catOf(i) !== 'flowers' ? CATS[catOf(i)].n.split(' ')[0] + ' ' : ''}${esc(i.name)}</div>
-          <div class="meta">${i.packs} × ${i.per} ${CATS[catOf(i)].u} × ${zl(i.price)}</div>
-          <div class="meta">${Math.round(i.packs * i.per * 100) / 100} ${CATS[catOf(i)].u} · ${zl(cost(i))}</div>
+          <div class="meta">${i.packs} × ${i.per} ${uOf(i)} × ${zl(i.price)}</div>
+          <div class="meta">${Math.round(i.packs * i.per * 100) / 100} ${uOf(i)} · ${zl(cost(i))}</div>
           ${i.photo ? `<button class="photo-link" onclick="showPhoto('${esc(i.photo)}')">📷 фото</button>` : ''}
           ${ln ? `<span class="tag">👤 ${esc(ln)}</span><br>` : ''}
           ${i.by ? `<div class="by">${byLine(i)}</div>` : ''}
           <button class="del" onclick="editItemForm('${i.id}')" style="color:var(--accent);margin-right:14px">✏️ Изменить</button><button class="del" onclick="delItem('${i.id}')">Удалить</button></div>
-        <div class="right"><div class="per">${zl(i.price / i.per)}</div><div class="meta">за 1 ${CATS[catOf(i)].u}</div></div>
+        <div class="right"><div class="per">${zl(i.price / i.per)}</div><div class="meta">за 1 ${uOf(i)}</div></div>
       </div>`;
     }
     $('list').innerHTML = html;
