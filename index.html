@@ -199,6 +199,8 @@
   .lead .sub > div > span:last-child{text-align:right}
   .day{font-weight:600;color:var(--accent);opacity:.8}
   .seg{border:1px solid var(--line);padding:4px}
+  .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:6px 0 2px}.bar i{display:block;height:100%;background:var(--ok)}.bar.low i{background:var(--danger)}
+  .lowcard{border:1px solid var(--danger)}.lowcard .name{color:var(--danger)}
   .seg a.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 2px 8px rgba(184,71,95,.3)}
   .client{border:1px solid #f3dc9a}
   .person .name{color:var(--accent)}
@@ -367,6 +369,31 @@
 
     <!-- РАСХОДЫ (CAPEX) -->
     <div id="expView" class="hidden">
+      <div class="seg" id="eMode" style="margin:0 0 12px"><a data-m="mat" class="on">🎀 Материалы</a><a data-m="capex">💸 Вложения</a></div>
+      <div id="expMat">
+        <div class="card lowcard hidden" id="lowCard"></div>
+        <h2 style="margin-top:4px">✂️ Списать на букет</h2>
+        <div class="card" id="useForm">
+          <div class="name hidden" id="useEditTitle">✏️ Редактирование списания</div>
+          <label>Материал</label><select id="uItem"></select>
+          <div class="row2">
+            <div><label id="uQtyLbl">Сколько потрачено</label><input id="uQty" type="number" inputmode="decimal" step="any" placeholder="2"></div>
+            <div><label>Букет (лид)</label><select id="uLead"></select></div>
+          </div>
+          <div class="meta" id="uHint"></div>
+          <label>Заметка</label><input id="uNote" placeholder="букет 25 роз, обёртка">
+          <div class="err" id="useErr"></div>
+          <button id="useBtn">Списать</button>
+          <button class="ghost hidden" id="useCancel">Отменить редактирование</button>
+        </div>
+        <h2>Склад материалов</h2>
+        <div id="stockList"></div>
+        <h2>Списания</h2>
+        <div id="useList"></div>
+        <h2>+ Купили материал</h2>
+        <div id="matFormSlot"></div>
+      </div>
+      <div id="expCapex" class="hidden">
       <div class="card">
         <div class="name hidden" id="expEditTitle">✏️ Редактирование расхода</div>
         <div class="row2">
@@ -386,6 +413,7 @@
       </div>
       <div class="card sum" id="expSum"></div>
       <div id="expList"></div>
+      </div>
     </div>
 
     <!-- ОТЧЁТ -->
@@ -428,7 +456,7 @@
 
     <!-- ЗАКУПКИ -->
     <div id="purchView">
-    <div class="card">
+    <div class="card" id="itemForm">
       <div class="seg" id="fCat" style="margin-top:0"></div>
       <label>Для лида</label>
       <select id="fLead"></select>
@@ -465,7 +493,7 @@
     <div class="card" id="sCats"></div>
 
     <h2>История</h2>
-    <div class="chips" id="pFilter"></div>
+    <div class="chips hidden" id="pFilter"></div>
     <div id="list"></div>
     </div>
     <div id="photoView" class="hidden" onclick="this.classList.add('hidden')"><img id="photoImg" alt=""><span>нажми, чтобы закрыть</span></div>
@@ -582,7 +610,7 @@ $('unlockBtn').onclick = async () => {
 $('logoutBtn').onclick = async () => { await igSubscribe(false); sessionStorage.removeItem('ok'); await store.del('remember'); location.reload(); };
 
 // ---------- данные: закупки (p_) и лиды (l_) ----------
-let items = [], leads = [];
+let items = [], leads = [], uses = [];
 const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const cost = i => i.packs * i.price;
 const askDel = q => new Promise(r => inTG ? tg.showConfirm(q, r) : r(confirm(q)));
@@ -628,10 +656,33 @@ function applyData(d) {
   PRICES = d.prices && d.prices.length ? d.prices : DEFAULT_PRICES;
   SETTINGS = Object.assign({}, DEFAULT_SETTINGS, d.settings || {});
   PACK_COST = packTotal(SETTINGS);
+  uses = (d.uses || []).filter(x => !x.deleted).sort((a, b) => b.t - a.t);
   expenses = (d.expenses || []).filter(x => !x.deleted).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.t - a.t);
   render();
 }
 function setSync(text, bad) { $('sync').textContent = text; $('sync').classList.toggle('neg', !!bad); }
+
+// журнал правок: что изменилось в существующих записях (было → стало). Excel показывает его красным
+const LOG_SKIP = new Set(['msgs', 'unread', 'et', 'editedBy', 'deletedBy', 'deletedAt', 't', 'by']);
+const logVal = v => v == null ? '' : typeof v === 'object' ? JSON.stringify(v).slice(0, 300) : String(v).slice(0, 300);
+function diffLog(before, after, who) {
+  const out = [], now = Date.now();
+  ['items', 'leads', 'expenses', 'uses'].forEach(coll => {
+    const old = new Map((before[coll] || []).map(x => [x.id, x]));
+    (after[coll] || []).forEach(x => {
+      const o = old.get(x.id); if (!o) return;
+      const name = x.name || x.what || (coll === 'uses' ? ((after.items || []).find(i => i.id === x.item) || {}).name : '') || x.id;
+      new Set([...Object.keys(o), ...Object.keys(x)]).forEach(k => {
+        if (LOG_SKIP.has(k) || logVal(o[k]) === logVal(x[k])) return;
+        out.push({t: now, by: who, coll, id: x.id, name, field: k, from: logVal(o[k]), to: logVal(x[k])});
+      });
+    });
+  });
+  ['prices', 'settings'].forEach(k => {
+    if (before[k] && logVal(before[k]) !== logVal(after[k])) out.push({t: now, by: who, coll: k, id: '', name: k === 'prices' ? 'Прайс' : 'Параметры', field: '', from: 'изменено', to: ''});
+  });
+  return out;
+}
 
 // изменить базу: берём свежую версию, применяем fn, сохраняем; при конфликте — повтор
 async function mutate(fn, msg) {
@@ -639,7 +690,10 @@ async function mutate(fn, msg) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const cur = await ghGet(false);
     const d = cur.data; d.items = d.items || []; d.leads = d.leads || [];
+    const before = JSON.parse(JSON.stringify(d));
     fn(d);
+    const lg = diffLog(before, d, me());
+    if (lg.length) d.log = (d.log || []).concat(lg).slice(-5000);
     const r = await fetch(API, {method: 'PUT', headers: ghHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify(Object.assign({message: msg, content: b64encode(JSON.stringify(d, null, 1))}, cur.sha ? {sha: cur.sha} : {}))});
     if (r.ok) {
@@ -709,6 +763,7 @@ function tab(name) {
   [['tabP', 'purchView', 'p'], ['tabL', 'leadsView', 'l'], ['tabE', 'expView', 'e'], ['tabO', 'repView', 'o'], ['tabR', 'priceView', 'r']].forEach(([t, v, n]) => {
     $(t).classList.toggle('on', name === n); $(v).classList.toggle('hidden', name !== n);
   });
+  if (name === 'p' || name === 'e') placeItemForm(name);
   if (name === 'r') renderPrices();
   if (name === 'o') { renderReport(); fillSettings(); }
   if (name === 'e' && !expEditId && !$('eDate').value) resetExp();
@@ -724,7 +779,13 @@ const CATS = {
 };
 const catOf = i => CATS[i.cat] ? i.cat : 'flowers';
 const uOf = i => i.unit || (catOf(i) === 'paper' && /рулон/i.test(i.name || '') ? 'м' : CATS[catOf(i)].u);
-let fCat = 'flowers', pFilter = 'all';
+let fCat = 'flowers', pFilter = 'flowers';
+function placeItemForm(where) {
+  const f = $('itemForm');
+  if (where === 'e') { $('matFormSlot').appendChild(f); if (fCat === 'flowers') setCat('paper'); }
+  else { $('purchView').prepend(f); if (fCat !== 'flowers') setCat('flowers'); }
+  [...$('fCat').children].forEach(a => a.classList.toggle('hidden', (a.dataset.c === 'flowers') !== (where !== 'e')));
+}
 $('fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<a data-c="${k}">${c.n}</a>`).join('');
 function setCat(k) {
   fCat = k; const c = CATS[k];
@@ -746,6 +807,7 @@ $('pFilter').innerHTML = [['all', 'Все'], ...Object.entries(CATS).map(([k, c]
 $('pFilter').onclick = e => { const k = e.target.dataset && e.target.dataset.p; if (!k) return; pFilter = k;
   [...$('pFilter').children].forEach(a => a.classList.toggle('on', a.dataset.p === k)); render(); };
 setCat('flowers');
+placeItemForm('p');
 
 // ---------- фото: сжатие и хранение в приватном репо (photos/*.jpg) ----------
 let photoBlob = null, photoKeep = null; // новое сжатое фото / путь уже сохранённого
@@ -819,11 +881,12 @@ function resetItemForm() {
 }
 function editItemForm(id) {
   const i = items.find(x => x.id === id); if (!i) return;
-  itemEditId = id; tab('p');
+  itemEditId = id; if (catOf(i) === 'flowers') tab('p'); else { tab('e'); setEMode('mat'); }
   setCat(catOf(i)); clearPhoto(); photoKeep = i.photo || null;
   if (photoKeep) { $('fPhotoInfo').textContent = '📷 фото прикреплено — можно заменить или убрать'; $('fPhotoDel').classList.remove('hidden'); }
   $('fName').value = i.name; $('fPacks').value = i.packs; $('fPer').value = i.per; $('fPrice').value = i.price; $('fLead').value = i.lead || '';
-  $('addBtn').textContent = 'Сохранить изменения'; $('addCancel').classList.remove('hidden'); calc(); window.scrollTo(0, 0);
+  $('addBtn').textContent = 'Сохранить изменения'; $('addCancel').classList.remove('hidden'); calc();
+  $('itemForm').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 $('addCancel').onclick = resetItemForm;
 $('addBtn').onclick = async () => {
@@ -1387,6 +1450,115 @@ function renderExpenses() {
   </div>`).join('') : '<div class="card empty">Расходов пока нет</div>';
 }
 
+// ---------- материалы: остатки и списания на букеты ----------
+let eMode = 'mat', useEditId = null;
+function setEMode(m) {
+  eMode = m; [...$('eMode').children].forEach(a => a.classList.toggle('on', a.dataset.m === m));
+  $('expMat').classList.toggle('hidden', m !== 'mat'); $('expCapex').classList.toggle('hidden', m !== 'capex');
+}
+$('eMode').onclick = e => { const m = e.target.dataset && e.target.dataset.m; if (m) setEMode(m); };
+const mats = () => items.filter(i => catOf(i) !== 'flowers');
+const r2 = v => Math.round(v * 100) / 100;
+const totalOf = i => r2(i.packs * i.per);
+const usedOf = id => uses.filter(u => u.item === id).reduce((s, u) => s + (u.qty || 0), 0);
+const leftOf = i => r2(totalOf(i) - usedOf(i.id));
+// заканчивается: осталось ≤ min (если задан) или ≤ 25% от купленного
+const isLow = i => totalOf(i) > 0 && leftOf(i) <= (i.min != null ? i.min : totalOf(i) * 0.25);
+const unitCost = i => i.per ? i.price / i.per : 0;
+function uHint() {
+  const i = items.find(x => x.id === $('uItem').value);
+  $('uQtyLbl').textContent = 'Сколько потрачено' + (i ? ', ' + uOf(i) : '');
+  const q = num($('uQty').value);
+  $('uHint').textContent = i ? `Осталось ${leftOf(i)} ${uOf(i)} · ${zl(unitCost(i))} за 1 ${uOf(i)}` + (q ? ` · списание ${zl(q * unitCost(i))}` : '') : '';
+}
+$('uItem').onchange = uHint; $('uQty').oninput = uHint;
+function resetUse() {
+  useEditId = null; $('uQty').value = ''; $('uNote').value = ''; $('useErr').textContent = '';
+  $('useBtn').textContent = 'Списать'; $('useEditTitle').classList.add('hidden'); $('useCancel').classList.add('hidden'); uHint();
+}
+$('useCancel').onclick = resetUse;
+function useFor(leadId, itemId) {
+  tab('e'); setEMode('mat'); resetUse();
+  if (leadId != null) $('uLead').value = leadId;
+  if (itemId) $('uItem').value = itemId;
+  uHint(); $('useForm').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+function editUse(id) {
+  const u = uses.find(x => x.id === id); if (!u) return;
+  useFor(u.lead || '', u.item); useEditId = id;
+  $('uQty').value = u.qty; $('uNote').value = u.note || ''; uHint();
+  $('useBtn').textContent = 'Сохранить изменения'; $('useEditTitle').classList.remove('hidden'); $('useCancel').classList.remove('hidden');
+}
+$('useBtn').onclick = async () => {
+  const f = {item: $('uItem').value, qty: num($('uQty').value), lead: $('uLead').value, note: $('uNote').value.trim()};
+  $('useErr').textContent = '';
+  const i = items.find(x => x.id === f.item);
+  if (!i || !(f.qty > 0)) return $('useErr').textContent = 'Выбери материал и сколько потрачено';
+  const own = useEditId ? (uses.find(x => x.id === useEditId) || {}).qty || 0 : 0;
+  if (f.qty > leftOf(i) + own + 1e-9 && !await askDel(`На складе только ${r2(leftOf(i) + own)} ${uOf(i)}. Всё равно списать ${f.qty}?`)) return;
+  $('useBtn').disabled = true;
+  const id = useEditId;
+  const saved = await mutate(d => {
+    d.uses = d.uses || [];
+    if (id) { const x = d.uses.find(x => x.id === id); if (x) Object.assign(x, f, {editedBy: me(), et: Date.now()}); }
+    else d.uses.push(Object.assign({id: 'u' + Date.now().toString(36), t: Date.now(), by: me()}, f));
+  }, (id ? 'Списание изменено: ' : 'Списание: ') + i.name + ' ' + f.qty + ' ' + uOf(i)).catch(() => false);
+  $('useBtn').disabled = false;
+  if (!saved) return $('useErr').textContent = 'Не сохранилось — попробуй ещё раз';
+  resetUse();
+};
+async function delUse(id) {
+  if (!await askDel('Удалить списание? Материал вернётся на склад.')) return;
+  await mutate(d => { markDeleted(d.uses || [], id); }, 'Удалено списание').catch(() => setSync('⚠️ не сохранено', true));
+}
+function buyList() {
+  const low = mats().filter(isLow);
+  const txt = '🛒 Докупить:\n' + low.map(i => `• ${i.name} — осталось ${leftOf(i)} ${uOf(i)}`).join('\n');
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => setSync('📋 список скопирован')).catch(() => alert(txt));
+}
+function renderMaterials() {
+  const ms = mats(), low = ms.filter(isLow);
+  $('tabE').textContent = 'Расходы' + (low.length ? ' ⚠️' + low.length : '');
+  $('lowCard').classList.toggle('hidden', !low.length);
+  $('lowCard').innerHTML = low.length ? `<div class="name">⚠️ Заканчивается — пора докупить</div>` +
+    low.map(i => `<div class="meta">• ${esc(i.name)} — осталось <b>${leftOf(i)} ${uOf(i)}</b> из ${totalOf(i)}</div>`).join('') +
+    `<button class="small" onclick="buyList()">📋 Скопировать список покупок</button>` : '';
+  const curI = $('uItem').value, curL = $('uLead').value;
+  $('uItem').innerHTML = '<option value="">— выбери материал —</option>' + ms.filter(i => leftOf(i) > 0 || i.id === curI)
+    .map(i => `<option value="${i.id}">${CATS[catOf(i)].n.split(' ')[0]} ${esc(i.name)} — ост. ${leftOf(i)} ${uOf(i)}</option>`).join('');
+  $('uItem').value = ms.some(i => i.id === curI) ? curI : '';
+  $('uLead').innerHTML = '<option value="">— без букета —</option>' +
+    leads.map(l => `<option value="${l.id}">${esc(showName(l))}${l.date ? ' · ' + l.date.slice(5).split('-').reverse().join('.') : ''}${l.bouquet ? ' · ' + esc(l.bouquet) : ''}</option>`).join('');
+  $('uLead').value = leads.some(l => l.id === curL) ? curL : '';
+  uHint();
+  const order = ['paper', 'ribbon', 'other'];
+  const sorted = ms.slice().sort((a, b) => order.indexOf(catOf(a)) - order.indexOf(catOf(b)) || (leftOf(a) <= 0) - (leftOf(b) <= 0) || a.name.localeCompare(b.name));
+  $('stockList').innerHTML = sorted.length ? sorted.map(i => {
+    const t = totalOf(i), l = leftOf(i), pct = t ? Math.max(0, Math.min(100, l / t * 100)) : 0;
+    return `<div class="card item">
+      <div style="flex:1"><div class="name">${CATS[catOf(i)].n.split(' ')[0]} ${esc(i.name)}</div>
+        <div class="bar${isLow(i) ? ' low' : ''}"><i style="width:${pct}%"></i></div>
+        <div class="meta">осталось <b>${l} ${uOf(i)}</b> из ${t} · куплено ${new Date(i.t).toLocaleDateString('ru-RU')} за ${zl(cost(i))}</div>
+        ${i.photo ? `<button class="photo-link" onclick="showPhoto('${esc(i.photo)}')">📷 фото</button>` : ''}
+        ${i.by ? `<div class="by">${byLine(i)}</div>` : ''}
+        ${l > 0 ? `<button class="del" onclick="useFor(null,'${i.id}')" style="color:var(--accent);margin-right:14px">✂️ Списать</button>` : ''}<button class="del" onclick="editItemForm('${i.id}')" style="color:var(--accent);margin-right:14px">✏️ Изменить</button><button class="del" onclick="delItem('${i.id}')">Удалить</button></div>
+      <div class="right"><div class="per">${zl(unitCost(i))}</div><div class="meta">за 1 ${uOf(i)}</div></div>
+    </div>`;
+  }).join('') : '<div class="card empty">Материалов пока нет</div>';
+  const leadName = id => { const l = leads.find(x => x.id === id); return l ? showName(l) : ''; };
+  $('useList').innerHTML = uses.length ? uses.slice(0, 60).map(u => {
+    const i = items.find(x => x.id === u.item) || {name: '(удалённый материал)', per: 1, price: 0};
+    return `<div class="card item">
+      <div><div class="name">✂️ ${esc(i.name)}</div>
+        <div class="meta">${when(u.t)} · ${u.qty} ${i.id ? uOf(i) : ''}${u.lead ? ' · 💐 ' + esc(leadName(u.lead)) : ''}</div>
+        ${u.note ? `<div class="meta">${esc(u.note)}</div>` : ''}
+        ${u.by ? `<div class="by">${byLine(u)}</div>` : ''}
+        <button class="del" onclick="editUse('${u.id}')" style="color:var(--accent);margin-right:14px">✏️ Изменить</button><button class="del" onclick="delUse('${u.id}')">Удалить</button></div>
+      <div class="right"><div class="per">−${zl(u.qty * unitCost(i))}</div></div>
+    </div>`;
+  }).join('') : '<div class="card empty">Списаний пока нет</div>';
+}
+
 // ---------- календарь заказов ----------
 let calMonth = new Date(), calDay = null;
 calMonth.setDate(1);
@@ -1428,14 +1600,14 @@ function render() {
 
   // итого
   let total = 0, fSum = 0, qty = 0; const byCat = {};
-  items.forEach(i => { const k = catOf(i), c = cost(i); total += c; byCat[k] = byCat[k] || {sum: 0, qty: 0}; byCat[k].sum += c; byCat[k].qty += i.packs * i.per;
+  items.forEach(i => { const k = catOf(i), c = cost(i); if (k === 'flowers') total += c; byCat[k] = byCat[k] || {sum: 0, qty: 0}; byCat[k].sum += c; byCat[k].qty += i.packs * i.per;
     if (k === 'flowers') { fSum += c; qty += i.packs * i.per; } });
   $('sTotal').textContent = zl(total); $('sQty').textContent = qty; $('sAvg').textContent = qty ? zl(fSum / qty) : '—';
-  $('sCats').innerHTML = Object.entries(CATS).map(([k, c]) => byCat[k] ? `<div class="catrow"><span>${c.n}</span><span>${Math.round(byCat[k].qty * 100) / 100} ${c.u} · <b>${zl(byCat[k].sum)}</b> · ${zl(byCat[k].sum / byCat[k].qty)}/${c.u}</span></div>` : '').join('') || '<div class="meta">Закупок пока нет</div>';
+  $('sCats').innerHTML = Object.entries(CATS).filter(([k]) => k === 'flowers').map(([k, c]) => byCat[k] ? `<div class="catrow"><span>${c.n}</span><span>${Math.round(byCat[k].qty * 100) / 100} ${c.u} · <b>${zl(byCat[k].sum)}</b> · ${zl(byCat[k].sum / byCat[k].qty)}/${c.u}</span></div>` : '').join('') || '<div class="meta">Закупок пока нет</div>';
   $('names').innerHTML = [...new Set(items.filter(i => catOf(i) === fCat).map(i => i.name))].map(n => `<option value="${esc(n)}">`).join('');
 
   // история закупок
-  const shown = items.filter(i => pFilter === 'all' || catOf(i) === pFilter);
+  const shown = items.filter(i => catOf(i) === 'flowers');
   if (!shown.length) $('list').innerHTML = '<div class="card empty">Пока пусто</div>';
   else {
     let html = '', day = '';
@@ -1471,7 +1643,7 @@ function render() {
     $('leadFilter').querySelector(`[data-f="${f}"]`).textContent = (f === 'today' ? 'Сегодня' : 'Завтра') + (n ? ` (${n})` : '');
   });
 
-  renderExpenses();
+  renderExpenses(); renderMaterials();
   if (!$('repView').classList.contains('hidden')) renderReport();
   if (!$('calCard').classList.contains('hidden')) drawCal();
   if (!list.length) return $('leadList').innerHTML = `<div class="card empty">${leads.length ? 'Ничего не найдено' : 'Лидов пока нет'}</div>`;
@@ -1516,6 +1688,7 @@ function render() {
         ${c.driver ? `<div><span>Доставка (${esc(l.courier || '')})${l.promo ? ' 🎁 промо' : !c.deliv ? ' бесплатно' : ''}</span><span>клиент ${zl(c.deliv)} · водителю ${zl(c.driver)}</span></div>` : ''}
         ${c.delivCost ? `<div><span>Доставка за наш счёт</span><span>−${zl(c.delivCost)}</span></div>` : ''}
         ${c.deliv ? `<div><span>Итого с клиента</span><b>${zl(c.total)}</b></div>` : ''}
+        ${uses.filter(u => u.lead === l.id).map(u => { const i = items.find(x => x.id === u.item) || {name: '?', per: 1, price: 0}; return `<div><span>✂️ ${esc(i.name)} — ${u.qty} ${i.id ? uOf(i) : ''}</span><span class="meta">${zl(u.qty * unitCost(i))}</span></div>`; }).join('')}
         <div><span>Упаковка (себест.)</span><span><input class="mini" id="e_pack_${l.id}" type="number" inputmode="decimal" value="${pack}" onchange="editLead('${l.id}','pack')"> zł</span></div>
         <div><b>Себестоимость</b><b>${zl(costAll)}</b></div>
         ${l.sale ? `<div><b>Прибыль</b><b class="${profit >= 0 ? 'pos' : 'neg'}">${profit >= 0 ? '+' : ''}${zl(profit)}</b></div>` : ''}
@@ -1525,6 +1698,7 @@ function render() {
         ${l.by ? `<div class="by">${byLine(l)}</div>` : ''}
         <button class="small" onclick="editLeadForm('${l.id}')">✏️ Редактировать</button>
         <button class="small" onclick="buyFor('${l.id}')">+ Закупка</button>
+        <button class="small" onclick="useFor('${l.id}')">✂️ Материал на букет</button>
         <button class="del" onclick="delLead('${l.id}')">Удалить лида</button>
       </div>` : ''}
     </div>`;
