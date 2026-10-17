@@ -200,6 +200,8 @@
   .day{font-weight:600;color:var(--accent);opacity:.8}
   .seg{border:1px solid var(--line);padding:4px}
   .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:6px 0 2px}.bar i{display:block;height:100%;background:var(--ok)}.bar.low i{background:var(--danger)}
+  .urow{display:grid;grid-template-columns:1fr 84px 28px;gap:6px;align-items:center;margin-top:8px}.urow select,.urow input{margin:0}.urow .x{color:var(--danger);text-align:center;cursor:pointer;font-size:18px}
+  .urow .meta{grid-column:1/-1;margin-top:-2px}
   .lowcard{border:1px solid var(--danger)}.lowcard .name{color:var(--danger)}
   .seg a.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 2px 8px rgba(184,71,95,.3)}
   .client{border:1px solid #f3dc9a}
@@ -375,11 +377,10 @@
         <h2 style="margin-top:4px">✂️ Списать на букет</h2>
         <div class="card" id="useForm">
           <div class="name hidden" id="useEditTitle">✏️ Редактирование списания</div>
-          <label>Материал</label><select id="uItem"></select>
-          <div class="row2">
-            <div><label id="uQtyLbl">Сколько потрачено</label><input id="uQty" type="number" inputmode="decimal" step="any" placeholder="2"></div>
-            <div><label>Букет (лид)</label><select id="uLead"></select></div>
-          </div>
+          <label>Букет (лид)</label><select id="uLead"></select>
+          <label>Что ушло на букет</label>
+          <div id="uRows"></div>
+          <button class="small" id="uAdd" type="button">+ ещё материал</button>
           <div class="meta" id="uHint"></div>
           <label>Заметка</label><input id="uNote" placeholder="букет 25 роз, обёртка">
           <div class="err" id="useErr"></div>
@@ -1465,44 +1466,65 @@ const leftOf = i => r2(totalOf(i) - usedOf(i.id));
 // заканчивается: осталось ≤ min (если задан) или ≤ 25% от купленного
 const isLow = i => totalOf(i) > 0 && leftOf(i) <= (i.min != null ? i.min : totalOf(i) * 0.25);
 const unitCost = i => i.per ? i.price / i.per : 0;
-function uHint() {
-  const i = items.find(x => x.id === $('uItem').value);
-  $('uQtyLbl').textContent = 'Сколько потрачено' + (i ? ', ' + uOf(i) : '');
-  const q = num($('uQty').value);
-  $('uHint').textContent = i ? `Осталось ${leftOf(i)} ${uOf(i)} · ${zl(unitCost(i))} за 1 ${uOf(i)}` + (q ? ` · списание ${zl(q * unitCost(i))}` : '') : '';
+// строки «материал + сколько»: флорист вносит всё, что ушло на букет, одним сохранением
+function uOptions(cur) {
+  return '<option value="">— материал —</option>' + mats().filter(i => leftOf(i) > 0 || i.id === cur)
+    .map(i => `<option value="${i.id}"${i.id === cur ? ' selected' : ''}>${CATS[catOf(i)].n.split(' ')[0]} ${esc(i.name)} — ост. ${leftOf(i)} ${uOf(i)}</option>`).join('');
 }
-$('uItem').onchange = uHint; $('uQty').oninput = uHint;
+function addURow(item = '', qty = '') {
+  const r = document.createElement('div'); r.className = 'urow';
+  r.innerHTML = `<select class="uI">${uOptions(item)}</select><input class="uQ" type="number" inputmode="decimal" step="any" placeholder="сколько" value="${qty}">` +
+    `<a class="x" title="убрать">✕</a><div class="meta"></div>`;
+  r.querySelector('.uI').onchange = uHint; r.querySelector('.uQ').oninput = uHint;
+  r.querySelector('.x').onclick = () => { r.remove(); if (!$('uRows').children.length) addURow(); uHint(); };
+  $('uRows').appendChild(r); uHint();
+}
+$('uAdd').onclick = () => addURow();
+const uRowsData = () => [...$('uRows').children].map(r => ({row: r, item: r.querySelector('.uI').value, qty: num(r.querySelector('.uQ').value)}));
+function uHint() {
+  let sum = 0;
+  uRowsData().forEach(({row, item, qty}) => {
+    const i = items.find(x => x.id === item);
+    row.querySelector('.uQ').placeholder = i ? uOf(i) : 'сколько';
+    row.querySelector('.meta').textContent = i ? `осталось ${leftOf(i)} ${uOf(i)} · ${zl(unitCost(i))} за 1 ${uOf(i)}` + (qty ? ` → ${zl(qty * unitCost(i))}` : '') : '';
+    if (i) sum += qty * unitCost(i);
+  });
+  $('uHint').textContent = sum ? `Материалов на букет: ${zl(sum)}` : '';
+  $('uAdd').classList.toggle('hidden', !!useEditId);
+}
 function resetUse() {
-  useEditId = null; $('uQty').value = ''; $('uNote').value = ''; $('useErr').textContent = '';
+  useEditId = null; $('uRows').innerHTML = ''; addURow(); $('uNote').value = ''; $('useErr').textContent = '';
   $('useBtn').textContent = 'Списать'; $('useEditTitle').classList.add('hidden'); $('useCancel').classList.add('hidden'); uHint();
 }
 $('useCancel').onclick = resetUse;
 function useFor(leadId, itemId) {
   tab('e'); setEMode('mat'); resetUse();
   if (leadId != null) $('uLead').value = leadId;
-  if (itemId) $('uItem').value = itemId;
+  if (itemId) { $('uRows').innerHTML = ''; addURow(itemId); }
   uHint(); $('useForm').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 function editUse(id) {
   const u = uses.find(x => x.id === id); if (!u) return;
   useFor(u.lead || '', u.item); useEditId = id;
-  $('uQty').value = u.qty; $('uNote').value = u.note || ''; uHint();
+  $('uRows').innerHTML = ''; addURow(u.item, u.qty); $('uNote').value = u.note || ''; uHint();
   $('useBtn').textContent = 'Сохранить изменения'; $('useEditTitle').classList.remove('hidden'); $('useCancel').classList.remove('hidden');
 }
 $('useBtn').onclick = async () => {
-  const f = {item: $('uItem').value, qty: num($('uQty').value), lead: $('uLead').value, note: $('uNote').value.trim()};
+  const lead = $('uLead').value, note = $('uNote').value.trim();
   $('useErr').textContent = '';
-  const i = items.find(x => x.id === f.item);
-  if (!i || !(f.qty > 0)) return $('useErr').textContent = 'Выбери материал и сколько потрачено';
+  const rows = uRowsData().filter(r => r.item || r.qty);
+  if (!rows.length || rows.some(r => !r.item || !(r.qty > 0))) return $('useErr').textContent = 'В каждой строке выбери материал и сколько потрачено';
   const own = useEditId ? (uses.find(x => x.id === useEditId) || {}).qty || 0 : 0;
-  if (f.qty > leftOf(i) + own + 1e-9 && !await askDel(`На складе только ${r2(leftOf(i) + own)} ${uOf(i)}. Всё равно списать ${f.qty}?`)) return;
+  const need = {}; rows.forEach(r => need[r.item] = (need[r.item] || 0) + r.qty);
+  const over = Object.entries(need).map(([id, q]) => ({i: items.find(x => x.id === id), q})).filter(({i, q}) => q > leftOf(i) + own + 1e-9);
+  if (over.length && !await askDel('На складе меньше, чем списываешь:\n' + over.map(({i, q}) => `${i.name}: есть ${r2(leftOf(i) + own)} ${uOf(i)}, списываешь ${q}`).join('\n') + '\nВсё равно списать?')) return;
   $('useBtn').disabled = true;
-  const id = useEditId;
+  const id = useEditId, now = Date.now();
   const saved = await mutate(d => {
     d.uses = d.uses || [];
-    if (id) { const x = d.uses.find(x => x.id === id); if (x) Object.assign(x, f, {editedBy: me(), et: Date.now()}); }
-    else d.uses.push(Object.assign({id: 'u' + Date.now().toString(36), t: Date.now(), by: me()}, f));
-  }, (id ? 'Списание изменено: ' : 'Списание: ') + i.name + ' ' + f.qty + ' ' + uOf(i)).catch(() => false);
+    if (id) { const x = d.uses.find(x => x.id === id); if (x) Object.assign(x, {item: rows[0].item, qty: rows[0].qty, lead, note}, {editedBy: me(), et: now}); }
+    else rows.forEach((r, k) => d.uses.push({id: 'u' + (now + k).toString(36), t: now + k, by: me(), item: r.item, qty: r.qty, lead, note}));
+  }, (id ? 'Списание изменено: ' : 'Списание на букет: ') + rows.map(r => (items.find(x => x.id === r.item) || {}).name + ' ' + r.qty).join(', ')).catch(() => false);
   $('useBtn').disabled = false;
   if (!saved) return $('useErr').textContent = 'Не сохранилось — попробуй ещё раз';
   resetUse();
@@ -1523,10 +1545,9 @@ function renderMaterials() {
   $('lowCard').innerHTML = low.length ? `<div class="name">⚠️ Заканчивается — пора докупить</div>` +
     low.map(i => `<div class="meta">• ${esc(i.name)} — осталось <b>${leftOf(i)} ${uOf(i)}</b> из ${totalOf(i)}</div>`).join('') +
     `<button class="small" onclick="buyList()">📋 Скопировать список покупок</button>` : '';
-  const curI = $('uItem').value, curL = $('uLead').value;
-  $('uItem').innerHTML = '<option value="">— выбери материал —</option>' + ms.filter(i => leftOf(i) > 0 || i.id === curI)
-    .map(i => `<option value="${i.id}">${CATS[catOf(i)].n.split(' ')[0]} ${esc(i.name)} — ост. ${leftOf(i)} ${uOf(i)}</option>`).join('');
-  $('uItem').value = ms.some(i => i.id === curI) ? curI : '';
+  const curL = $('uLead').value;
+  if (!$('uRows').children.length) addURow();
+  [...$('uRows').children].forEach(r => { const sel = r.querySelector('.uI'), v = sel.value; sel.innerHTML = uOptions(v); sel.value = ms.some(i => i.id === v) ? v : ''; });
   $('uLead').innerHTML = '<option value="">— без букета —</option>' +
     leads.map(l => `<option value="${l.id}">${esc(showName(l))}${l.date ? ' · ' + l.date.slice(5).split('-').reverse().join('.') : ''}${l.bouquet ? ' · ' + esc(l.bouquet) : ''}</option>`).join('');
   $('uLead').value = leads.some(l => l.id === curL) ? curL : '';
