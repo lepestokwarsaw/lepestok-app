@@ -736,6 +736,10 @@ function setCat(k) {
   if (!$('fPer').value || Object.values(DEF_PER).includes(num($('fPer').value))) { $('fPer').value = DEF_PER[k] || ''; calc(); }
   render && items && $('names') && ($('names').innerHTML = [...new Set(items.filter(i => catOf(i) === k).map(i => i.name))].map(n => `<option value="${esc(n)}">`).join(''));
 }
+// пянка флористическая — всегда пачка 20 шт
+$('fName').addEventListener('input', () => {
+  if (/п[яа]нк|pianka/i.test($('fName').value) && (!$('fPer').value || $('fPer').value === '1')) { $('fPer').value = 20; calc(); }
+});
 $('fCat').onclick = e => { const k = e.target.dataset && e.target.dataset.c; if (k) setCat(k); };
 $('pFilter').innerHTML = [['all', 'Все'], ...Object.entries(CATS).map(([k, c]) => [k, c.n])].map(([k, n]) => `<a data-p="${k}"${k === 'all' ? ' class="on"' : ''}>${n}</a>`).join('');
 $('pFilter').onclick = e => { const k = e.target.dataset && e.target.dataset.p; if (!k) return; pFilter = k;
